@@ -1,0 +1,5 @@
+# Text files always check out with LF, on every platform (front matter, hooks and scripts depend on it).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
