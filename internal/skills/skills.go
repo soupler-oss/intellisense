@@ -52,6 +52,7 @@ func List() ([]Info, error) {
 }
 
 func description(skill string) string {
+	skill = strings.ReplaceAll(skill, "\r\n", "\n")
 	if !strings.HasPrefix(skill, "---\n") {
 		return ""
 	}
@@ -114,6 +115,7 @@ func Outputs(p *policy.Policy) ([]adapters.Output, error) {
 
 // markGenerated puts the generated line after the front matter, which Claude Code needs first.
 func markGenerated(md string) string {
+	md = strings.ReplaceAll(md, "\r\n", "\n")
 	if strings.HasPrefix(md, "---\n") {
 		if end := strings.Index(md[4:], "\n---\n"); end >= 0 {
 			cut := 4 + end + 5

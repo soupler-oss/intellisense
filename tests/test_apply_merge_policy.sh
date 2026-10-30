@@ -117,7 +117,8 @@ EOF
 run_script() {
   local stubs_dir="$1"; shift
   SCRIPT_EXIT=
-  SCRIPT_OUTPUT=$(PATH="$stubs_dir:$PATH" bash "$SCRIPT" "$@" 2>&1) || SCRIPT_EXIT=$?
+  # stdin from /dev/null: the stub reads stdin when it is not a terminal, so an inherited open pipe would hang it.
+  SCRIPT_OUTPUT=$(PATH="$stubs_dir:$PATH" bash "$SCRIPT" "$@" 2>&1 </dev/null) || SCRIPT_EXIT=$?
   SCRIPT_EXIT=${SCRIPT_EXIT:-0}
 }
 

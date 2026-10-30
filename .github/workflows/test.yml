@@ -19,9 +19,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      # The current stable Go: binaries from older toolchains (1.22) abort on current macOS (missing LC_UUID).
+      # go.mod's `go` line stays the minimum for `go install` users.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: go test -count=1 ./...
 
   bash:
@@ -33,6 +35,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -49,9 +54,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # The current stable Go: binaries from older toolchains (1.22) abort on current macOS (missing LC_UUID).
+      # go.mod's `go` line stays the minimum for `go install` users.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
       - run: sudo apt-get install -y -qq shellcheck
       - run: bash scripts/ci/lint.sh
 

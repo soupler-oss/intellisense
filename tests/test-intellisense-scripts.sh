@@ -390,7 +390,7 @@ else
   echo "# Test CLAUDE.md" > CLAUDE.md
   make_fake_go_repo_graph_ready "$PWD"
 
-  run_setup_repos --repo . --stack go --claude-md-action inject --non-interactive
+  run_setup_repos --repo . --stack go --claude-md-action inject --non-interactive --code-intel code-review-graph
 
   if [[ "$LAST_SETUP_REPOS_EXIT" -ne 0 ]]; then
     test_fail "Go graph integration: setup-repos.sh exit=$LAST_SETUP_REPOS_EXIT — CRG probe succeeded but setup-repos failed; investigate"

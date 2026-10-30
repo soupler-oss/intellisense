@@ -604,7 +604,7 @@ test_global_claude_md_backed_up_then_regenerated() {
 
   # Assertion 2: backup must NOT have .md extension (so $HOME/**/*.md globs miss it).
   local MD_BACKUPS
-  MD_BACKUPS=$(ls -1 "$FAKE_HOME/.intellisense-backups/"CLAUDE*.md.* 2>/dev/null \
+  MD_BACKUPS=$(ls -1 "$FAKE_HOME/.intellisense-backups/"CLAUDE*.md.* \
             "$FAKE_HOME/.intellisense-backups/"CLAUDE.md.bak-* 2>/dev/null | wc -l | tr -d ' ')
   if [ "$MD_BACKUPS" = "0" ]; then
     echo -e "  ${GREEN}✓${NC} backup filename has no .md extension"
