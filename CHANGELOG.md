@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   text files out with LF everywhere.
 - CI, the release workflow and the GitHub Action build with the current stable Go, so macOS test binaries load.
 
+### Changed
+- README rewritten in plain language: what it does, six example scenarios, a five-minute start and a glossary, with
+  the technical reference below. The winget command is no longer listed until the package is published.
+
 ## [1.0.0]
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**
