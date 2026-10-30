@@ -1,0 +1,232 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this app does and for whom]
+- **Stack**: Angular {{STACK_VERSION}} with [NgModules|standalone] + [NgRx|signals]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, XSS/CSRF prevention
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/angular-patterns.md` — File naming, Observable conventions, NgRx patterns
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, API backends consumed, key dependencies, app metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| App architecture, module structure, layers | `knowledge-base/00-system-architecture.md` |
+| Technology stack, npm dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, feature/component layout | `knowledge-base/01-system-source-tree.md` |
+| Backend API endpoints this app consumes | `knowledge-base/02-api-contracts.md` |
+| Business rules, domain constraints, UX access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core user flows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, Angular patterns, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, Jasmine/Karma/Jest/Cypress setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the app design. Example:]
+
+```
+Angular SPA serving the operations dashboard and mobile companion web views.
+Organized as feature modules with lazy loading; shared components live in the shared module.
+State management via NgRx store; side effects handled exclusively through NgRx Effects.
+Consumes orders-api REST APIs for data; uses Firebase for real-time push events.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: src/app/core/auth.service.ts] | [XX KB] | [Reason: all auth flows depend on this] |
+| [TODO: src/app/app.module.ts] | [XX KB] | [Reason: all module imports and bootstrap here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `src/app/core/[main].service.ts` — Singleton services shared across features
+- `src/app/features/[feature]/[feature].component.ts` — Top-level feature entry point
+- `src/app/shared/[component]/[component].component.ts` — Reusable UI components
+
+Layers and their purpose:
+- `src/app/core/` → Singleton services, HTTP interceptors, auth guards, error handlers
+- `src/app/shared/` → Reusable components, pipes, and directives (imported by feature modules)
+- `src/app/features/` → Feature modules or standalone routes; one directory per feature
+- `src/environments/` → Environment-specific config (`environment.ts`, `environment.prod.ts`)
+- `src/assets/` → Static files (images, fonts, i18n)
+- `src/app/store/` → NgRx reducers, selectors, actions, effects (if using NgRx)
+
+## Upstream Dependencies
+
+Backend services this app consumes APIs from:
+- `[service-name]`: [which endpoints or data this app reads/writes]
+
+## Downstream Consumers
+
+Other apps or services that embed or depend on this frontend:
+- `[service-name]`: [why they depend on it]
+
+If this is a standalone SPA with no downstream consumers, write: NONE.
+
+## Shared Database Tables
+
+Not applicable to frontend apps. If this app writes to a backend database via API,
+list the affected tables in `knowledge-base/api-contracts.md`.
+
+## API Contracts
+
+Backend endpoints consumed by this app (list only where contract behavior matters
+for the frontend — not every endpoint needs to appear here):
+- `[METHOD /path/vN]`: consumed for `[purpose]` — [key constraint or format note]
+
+## Domain Terms
+
+App-specific terms that mean something different here than in backend services:
+- `[Term]`: [Definition as used in this frontend]
+
+## Angular Version Constraints
+
+**CRITICAL — do not mix patterns mid-repo:**
+
+- **Module strategy**: This app uses [NgModules | standalone components] — do not introduce the other
+- **State management**: This app uses [NgRx | Angular Signals | plain services] — do not introduce a second pattern
+- **Control flow syntax**: This app uses [`@if`/`@for` (Angular 17+) | `*ngIf`/`*ngFor` (legacy)] — do not mix
+- **Change detection**: [Default | OnPush] is the repo-wide setting — do not override per-component without justification
+
+## Bundle Size Limits
+
+Monitor `dist/[app-name]/main.*.js` after every build:
+- Flag any build that increases the main bundle by >5%
+- Hard target: <200 kB gzipped for the initial main bundle
+- Lazy-loaded feature chunks: target <100 kB each; flag if any chunk exceeds 150 kB
+
+Run `ng build --stats-json` and check bundle analyzer output for unexpected size spikes.
+
+## Escalation Triggers
+
+Repo-specific high-risk patterns. Encountering any of these during a task escalates the
+Change Contract `risk_level` by one tier and requires explicit user confirmation before proceeding:
+
+- **NgModules/standalone mixed**: Introducing a standalone component inside an NgModules app
+  (or vice versa) breaks the compilation strategy — do not do this without a migration plan
+- **Control flow syntax inconsistency**: `@if` and `*ngIf` must not coexist in the same template —
+  mixing versions causes runtime warnings and build instability
+- **NgRx state mutated outside store**: Directly mutating state in a component or service bypasses
+  the unidirectional data flow guarantee — all state changes must go through actions + reducers
+- **Sibling feature module import**: Importing from a sibling feature module creates a circular
+  dependency — all shared code must live in `src/app/shared/`
+- **Unsubscribed Observable in component**: Always use `takeUntilDestroyed()` or the `async` pipe;
+  a manual `subscribe()` without cleanup is a memory leak
+- **AppModule / CoreModule growth**: Adding services directly to `AppModule` or `CoreModule`
+  instead of the correct feature module inflates the initial bundle
+- [TODO: add repo-specific escalation triggers here]
+
+## Run / Test / Build
+
+```bash
+# Install dependencies (required after git worktree add — node_modules is gitignored)
+npm install
+
+# Run locally
+ng serve
+
+# Run unit tests (Jasmine/Karma)
+ng test
+
+# Run e2e tests (if configured)
+ng e2e
+
+# Production build
+ng build --prod
+
+# Lint
+ng lint
+
+# Check bundle sizes
+ng build --stats-json
+```
+
+## MCP Tools
+
+This repo's stack classification (mandatory-supported / candidate-supported / weak / unsupported) is the authoritative source for whether `code-review-graph` is required, advisory, or best-effort here. Read it once from `rules/operational/graph-supported-stacks.md` (single source of truth) — do not infer the policy from this template, which only applies as an example baseline.
+
+If this stack is currently classified mandatory-supported, `setup.sh` and `setup-repos.sh` hard-fail when the graph cannot be installed/built and this section MUST NOT be deleted. If classified weak or candidate, the graph runs best-effort and any output is auto-prefixed `[INTELLISENSE-WEAK-STACK: <stack> — <reason>]`.
+
+When the graph is available, prefer it over Grep/Read for these engineering questions (defined in `rules/operational/intelligence-sources.md` — refer to that file for the current set):
+- `change-spread`, `who-calls`, `what-changed-and-where-does-it-spread`
+
+Fall back to Grep/Read for raw text/regex search, when the graph is unavailable, or when the advisory marker indicates low confidence.
+
+## Task Tracking
+
+Every Tier 1+ commit carries its own task reference, with a key from `evidence.task_trailers` in `.intellisense.yml`
+(`Task: PROJ-12`, `Refs: #123`, or `Beads: <id>` when the team tracks work in Beads); the change also carries one
+change contract. The pre-push hook and CI block a Tier 1+ push without them. Run `intellisense classify` to see a
+change's tier.
+
+Tier 0 (docs, tests, comment-only edits) needs neither. Anything touching API/DB/auth/financial/migration/cross-service
+is Tier 1+; the policy's path rules decide.
+
+## Forbidden Content
+
+The following must NEVER appear in this file. If found during a review, delete it and move to
+the correct location:
+
+- Phase definitions, gate conditions, or approval flows → `development-workflow-impl.md`
+- Mode detection rules or mode table → `development-workflow.md`
+- Security checklist items (XSS, CSRF, PII in localStorage) → `security.md`
+- Angular naming conventions (file naming, class suffixes, Observable `$` suffix) → `angular-patterns.md`
+- Commit format, branch naming, PR requirements → `git-workflow.md`
+- Risk report JSON schema → `development-workflow-impl.md`
+- TDD cycle instructions (RED/GREEN/IMPROVE) → `development-workflow-impl.md`
+- Any rule that applies to ALL repos equally → belongs in intellisense global, not here
+
+## intellisense Health
+
+<!-- Auto-updated by /intellisense-audit -->
+@.intellisense-doc-health.json
+
+Last audit: [YYYY-MM-DD] | Score: [N]/100
+
+---
+
+**Last Updated**: [YYYY-MM-DD]
+**CLAUDE.md Version**: 4.0 (intellisense-aligned)
+**Stack**: Angular

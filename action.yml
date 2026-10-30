@@ -1,0 +1,65 @@
+name: intellisense gate
+description: Block a pull request that lacks the evidence its risk tier needs, or whose agent instructions are out of date.
+author: Soupler
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  base:
+    description: Base commit. Defaults to the pull request's base.
+    default: ${{ github.event.pull_request.base.sha }}
+  head:
+    description: Head commit. Defaults to the pull request's head.
+    default: ${{ github.event.pull_request.head.sha }}
+  check-sync:
+    description: Also fail when the generated agent instructions do not match .intellisense.yml.
+    default: "true"
+  working-directory:
+    description: The repository to check, relative to the workspace.
+    default: "."
+
+outputs:
+  tier:
+    description: The change's risk tier (0, 1 or 2).
+    value: ${{ steps.gate.outputs.tier }}
+  blocked:
+    description: Whether the gate blocked the change.
+    value: ${{ steps.gate.outputs.blocked }}
+
+runs:
+  using: composite
+  steps:
+    # Built from this action's own source at the pinned ref, so what runs is exactly what you reviewed.
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+
+    - name: Build intellisense
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/intellisense" ./cmd/intellisense
+
+    - name: Run the gate
+      id: gate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        CHECK_SYNC: ${{ inputs.check-sync }}
+      run: |
+        if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+          echo "::error title=intellisense::base and head are required; outside pull_request events pass them as inputs."
+          exit 2
+        fi
+        # The gate needs the merge base of base and head.
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          git fetch --no-tags --quiet --unshallow origin
+        fi
+        git cat-file -e "$BASE^{commit}" 2>/dev/null || git fetch --no-tags --quiet origin "$BASE"
+        git cat-file -e "$HEAD^{commit}" 2>/dev/null || git fetch --no-tags --quiet origin "$HEAD"
+        sync_flag=""
+        [ "$CHECK_SYNC" = "true" ] || sync_flag="--no-sync"
+        "$RUNNER_TEMP/intellisense" check --base "$BASE" --head "$HEAD" --format github $sync_flag

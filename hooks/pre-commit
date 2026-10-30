@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# intellisense pre-commit Hook: Fast Local Validation
+# Installed automatically by setup.sh and setup-repos.sh
+# Runs before committing to catch breaking issues early
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Only run in INTELLISENSE_SETUP repo (where scripts/ exists)
+if [ -f "$REPO_ROOT/scripts/validate-intellisense-content.sh" ]; then
+    bash "$REPO_ROOT/scripts/validate-intellisense-content.sh" || exit 1
+fi
+
+exit 0

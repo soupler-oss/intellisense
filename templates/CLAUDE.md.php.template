@@ -1,0 +1,221 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: PHP {{STACK_VERSION}} with Laravel [version] + Eloquent ORM
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/laravel-patterns.md` — Naming, Eloquent patterns, migration format
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (via `@` include — only this one file):
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read on-demand when task requires** (Phase 2+ only — do NOT pre-load):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify response preferences. Examples:
+- For operational/debugging tasks: terse responses, no trailing summaries
+- For design/analysis tasks: allow tables, diffs, structured output
+- Structured task outputs (tables, diffs, analysis) should be exempt from word limits — they are necessary for clarity and completeness, not optional]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+Core API service handling driver allocation, mission management, and account/payout processing.
+Requests are parsed and validated via Form Requests, then routed to the Service layer.
+Services orchestrate business logic; all database access is via Eloquent through Repositories.
+Real-time location updates flow through Socket.IO (Node.js) and are batched into MySQL via Redis.
+Soft-delete is enforced for all auditable entities.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: app/Services/MainService.php] | [XX KB] | [Reason: e.g., all business logic routes through here] |
+| [TODO: app/Http/Controllers/CoreController.php] | [XX KB] | [Reason: e.g., most API endpoints defined here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `app/Http/Controllers/[Main].php` — HTTP routing, request parsing, Form Request validation
+- `app/Services/[Main].php` — Business logic orchestration (no direct DB queries)
+- `app/Repositories/[Main].php` — All database access via Eloquent
+- `app/Models/[Main].php` — Eloquent model definitions, relations, scopes
+
+Layers and their purpose (abbreviated — full conventions in `laravel-patterns.md`):
+- `app/Http/Controllers/` → Request parsing, validation (Form Requests), route to service
+- `app/Services/` → Business logic orchestration; no raw DB queries
+- `app/Repositories/` → All Eloquent DB access
+- `app/Models/` → Model definitions, relations, scopes
+
+[Add repo-specific directories below if this service adds custom layers — e.g., Traits, Helpers, Jobs, etc.]
+
+## Upstream Dependencies
+
+Services this repo depends on (and why):
+- `[service-name]`: [what data or capability this repo consumes from it]
+
+## Downstream Consumers
+
+Services that depend on this repo (and what they consume):
+- `[service-name]`: [which endpoint or event they consume]
+
+## Shared Database Tables
+
+Tables written by this service AND at least one other service (2+ writers only):
+- `[table]`: also written by `[service-name, service-name]`
+
+Do NOT list tables only read by this service.
+
+## API Contracts
+
+Endpoints consumed by OTHER services (not internal routes, not frontend-only):
+- `[METHOD /path/vN]`: consumed by `[service]` — [brief description]
+
+## Domain Terms
+
+Service-specific terms that mean something different here than in other services:
+
+| Term | Definition (service-specific) | KB Cross-Reference |
+|------|------------------------------|-------------------|
+| [Term 1] | [What it means in this service] | `knowledge-base/[file].md#[section]` or — |
+| [Term 2] | [What it means in this service] | `knowledge-base/[file].md#[section]` or — |
+
+When adding terms, link to KB anchors where domain-specific algorithms or rules are documented.
+If no dedicated KB section exists, leave the cross-reference empty or note it in the Definition column.
+
+## Financial Rules
+
+Business rules governing money handling (fill if this service touches financial data):
+- `[Rule]`: [Why it matters — what goes wrong without it]
+
+Example:
+```
+- Soft-delete only (use SoftDeletes trait): Maintains audit trail for regulatory compliance
+- All currency stored as int (smallest unit, e.g. cents): Prevents float rounding errors
+- Idempotency keys required: Prevents duplicate charges on retry
+- Webhook signatures verified before processing: Prevents spoofed payment callbacks
+```
+
+## Escalation Triggers
+
+Repo-specific high-risk patterns. Encountering any of these during a task escalates the
+Change Contract `risk_level` by one tier and requires explicit user confirmation before proceeding:
+
+| Pattern | Why it matters | Required action | Reference |
+|---------|---------------|----------------|-----------|
+| Queue name not in `[QueueNames registry]` | Undefined queues silently drop jobs | Stop; add name to registry first | `queue-jobs.md`; list repo-specific queue names in escalation description |
+| Write routed to read replica | Data loss under concurrent load | Stop; route to primary | `laravel-patterns.md` |
+| File >100 KB modified | High blast radius; scope difficult to bound | Escalate to HIGH risk; scope smallest possible change | Repo-specific |
+| [TODO: service pattern 1] | [Why it escalates] | [What Claude should do] | [Rule file or Repo-specific] |
+| [TODO: service pattern 2] | [Why it escalates] | [What Claude should do] | [Rule file or Repo-specific] |
+
+## Run / Test / Build
+
+Fill with validated commands from the actual repo. Verify each command before adding.
+Minimum required:
+
+```bash
+# Run locally
+[service start command]
+
+# Run all tests
+[test runner command]
+
+# Database migration
+[migration command]
+
+# Lint / syntax check
+[lint command]
+```
+
+Delete this section if commands are documented in the repo's README.
+
+**Note**: Derive all commands by examining `package.json`, `Makefile`, `.github/workflows/`, or equivalent
+build configuration files in the actual repo. Do not copy template examples without validation.
+
+## MCP Tools
+
+This repo's stack classification (mandatory-supported / candidate-supported / weak / unsupported) is the authoritative source for whether `code-review-graph` is required, advisory, or best-effort here. Read it once from `rules/operational/graph-supported-stacks.md` (single source of truth) — do not infer the policy from this template, which only applies as an example baseline.
+
+If this stack is currently classified mandatory-supported, `setup.sh` and `setup-repos.sh` hard-fail when the graph cannot be installed/built and this section MUST NOT be deleted. If classified weak or candidate, the graph runs best-effort and any output is auto-prefixed `[INTELLISENSE-WEAK-STACK: <stack> — <reason>]`.
+
+When the graph is available, prefer it over Grep/Read for these engineering questions (defined in `rules/operational/intelligence-sources.md` — refer to that file for the current set):
+- `change-spread`, `who-calls`, `what-changed-and-where-does-it-spread`
+
+Fall back to Grep/Read for raw text/regex search, when the graph is unavailable, or when the advisory marker indicates low confidence.
+
+## Task Tracking
+
+Every Tier 1+ commit carries its own task reference, with a key from `evidence.task_trailers` in `.intellisense.yml`
+(`Task: PROJ-12`, `Refs: #123`, or `Beads: <id>` when the team tracks work in Beads); the change also carries one
+change contract. The pre-push hook and CI block a Tier 1+ push without them. Run `intellisense classify` to see a
+change's tier.
+
+Tier 0 (docs, tests, comment-only edits) needs neither. Anything touching API/DB/auth/financial/migration/cross-service
+is Tier 1+; the policy's path rules decide.
+
+## Scope Boundary
+
+This file contains only service-specific constraints. Phases, gates, security checklists, naming
+conventions, commit format, and TDD instructions are governed by intellisense global rules
+and must NOT be restated here. See `rules/operational/protocol-governance.md` for conflict resolution.
+
+## intellisense Health
+
+<!-- Run `/intellisense-audit` manually to update this section. Not auto-triggered. -->
+
+Last audit: [YYYY-MM-DD] | Score: [N]/100
+
+---
+
+**Last Updated**: [YYYY-MM-DD]
+**CLAUDE.md Version**: 4.0 (intellisense-aligned)
+**Stack**: PHP/Laravel

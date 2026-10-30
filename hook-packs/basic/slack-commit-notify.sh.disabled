@@ -1,0 +1,68 @@
+#!/bin/bash
+# hook-packs/basic/slack-commit-notify.sh.disabled
+# Send commit notification to Slack
+# DISABLED BY DEFAULT — remove .disabled suffix and set SLACK_WEBHOOK_URL env to enable
+#
+# Install with:
+#   1. Set Slack webhook: export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+#   2. Enable hook: mv hook-packs/basic/slack-commit-notify.sh.disabled hook-packs/basic/slack-commit-notify.sh
+#   3. Install: cp hook-packs/basic/slack-commit-notify.sh .claude/hooks/post-commit-slack-notify.sh
+#   4. Make executable: chmod +x .claude/hooks/post-commit-slack-notify.sh
+#
+# Hook will post:
+#   - Commit hash (short)
+#   - Branch name
+#   - Commit message (first line)
+#   - Files changed (up to 5)
+
+set -euo pipefail
+
+# Silently exit if webhook not configured
+[[ -z "${SLACK_WEBHOOK_URL:-}" ]] && exit 0
+
+# Get commit info
+COMMIT_HASH=$(git rev-parse --short HEAD)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+
+# Get list of changed files (up to 5)
+FILES=$(git diff-tree --no-commit-id --name-only -r HEAD | head -5 | sed 's/^/• /')
+FILE_COUNT=$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l)
+[[ $FILE_COUNT -gt 5 ]] && FILES="$FILES
+• ... and $((FILE_COUNT - 5)) more files"
+
+# Build Block Kit JSON
+PAYLOAD=$(cat <<EOF
+{
+  "blocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "📝 Commit: $COMMIT_HASH"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Branch:* \`$BRANCH\`\n*Message:* $COMMIT_MSG"
+      }
+    },
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Files Changed:*\n$FILES"
+      }
+    }
+  ]
+}
+EOF
+)
+
+# Send to Slack (non-blocking, suppress output)
+curl -X POST "$SLACK_WEBHOOK_URL" \
+  -H 'Content-type: application/json' \
+  --data "$PAYLOAD" \
+  2>/dev/null || true

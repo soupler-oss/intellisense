@@ -1,0 +1,154 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: Node.js {{STACK_VERSION}} with [Express|NestJS] (TypeScript [version])
+- **ORM**: [Prisma|TypeORM|Sequelize|Knex|none]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/node-patterns.md` — Naming, async error handling, validation, ORM patterns, Express vs NestJS
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example for Express:]
+
+```
+Express HTTP service handling order processing for the billing domain.
+Reads user profiles from auth-service; writes payout events via Kafka producer.
+All database access via Prisma with explicit $transaction blocks for multi-row writes.
+Financial endpoints require idempotency-key header; idempotency rows enforce uniqueness at DB level.
+```
+
+[Or for NestJS:]
+
+```
+NestJS service organized by feature module (orders, payments, payouts).
+Each module: controller (HTTP) + service (business logic) + repository (DB) + DTO (validation).
+Global ValidationPipe + class-validator on all DTOs. Global ExceptionFilter normalizes errors.
+TypeORM with explicit transaction managers for financial mutations.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: src/services/payment.service.ts] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/middleware/auth.middleware.ts] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
+
+## Structural Map
+
+Key files Claude reads first (Express layout):
+- `src/app.ts` or `src/main.ts` — entry point, middleware wiring, route registration
+- `src/routes/` — Express routers; thin handlers, delegate to services
+- `src/controllers/` — request parsing, response shaping (NestJS only)
+- `src/services/` — business logic and orchestration (no DB calls here)
+- `src/repositories/` — all database access via [Prisma|TypeORM]
+- `src/middleware/` — cross-cutting concerns: auth, logging, rate limiting
+- `src/dto/` — request/response shapes; validated at the boundary
+- `tests/` — `*.test.ts` or `*.spec.ts` alongside source
+
+Layers and their purpose:
+- `routes/` or `controllers/` → Parse request, validate via DTO, route to service (≤50 lines each)
+- `services/` → Business logic, orchestration across repositories (no direct DB queries)
+- `repositories/` → All database access; single DB concern per file
+- `middleware/` → Auth, logging, rate limiting, request context
+- `dto/` → Plain data classes; validation decorators (class-validator) or schemas (zod)
+- `tests/` → Real-persistence-path tests for P1/P2/P3 (see `node-patterns.md`)
+
+## Upstream Dependencies
+
+[List services/repos this depends on. Example:]
+- `auth-service` — user identity, role lookup
+- `notification-service` — outbound email/SMS
+
+## Downstream Consumers
+
+[List services/repos that depend on this. Example:]
+- `web-frontend` — REST API consumer
+- `mobile-app` — REST API consumer
+- `analytics-pipeline` — reads outbound Kafka topic
+
+## Domain Terms
+
+[Service-specific glossary. Example:]
+- **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
+- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+
+## Run / Test / Build
+
+```bash
+# Install
+npm ci
+
+# Dev server
+npm run dev          # Express: nodemon; NestJS: nest start --watch
+
+# Test
+npm test             # jest
+npm run test:e2e     # supertest + real DB
+
+# Build (production)
+npm run build        # tsc compile to dist/
+npm start            # node dist/main.js (Nest) or dist/app.js (Express)
+```
+
+## Known Gotchas
+
+[Service-specific quirks. Examples:]
+- **Async middleware error**: any async middleware MUST use `asyncHandler` wrapper or rejections silently 200. See `node-patterns.md §Async Error Handling`.
+- **Prisma `select`** drops fields silently; use `tests/scenario_node_p2_select_omission/demo.js` pattern for P2 coverage.
+- **NestJS DI scope**: avoid `@Injectable({ scope: Scope.REQUEST })` in financial paths — performance penalty + harder to test.

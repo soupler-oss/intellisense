@@ -1,0 +1,102 @@
+# Bash mutation patterns — used by preToolUse-contract-gate.sh
+#
+# ──────────────────────────────────────────────────────────────────────────
+# THREAT MODEL — read before adding patterns
+# ──────────────────────────────────────────────────────────────────────────
+# Purpose: prevent accidental Claude bypass of the contract gate via shell
+#          commands that mutate files (e.g. `sed -i`, `> file`, `mv`, `rm`).
+#
+# NOT a security boundary. This is defensive against Claude's normal output,
+# NOT against an adversarial actor trying to evade. Out of scope:
+#   - `python -c "open('x','w').write(...)"`, `node -e "fs.writeFileSync(...)"`
+#   - `base64 -d | bash`, here-doc redirects via eval, $(...)-encoded chains
+#   - Process substitution `<(...)` with mutation side-effects
+#   - Any indirection (eval, $-, escaped paths, chained pipes)
+#
+# Do NOT try to enumerate every bypass. That's a losing race.
+# If pilot data shows Claude actually emitting bypass patterns (python -c,
+# node -e, eval-wrapping), file a Beads issue and extend the list THEN.
+# Until then, the pre-push hook + commit review is the second-line backstop.
+# ──────────────────────────────────────────────────────────────────────────
+#
+# Format: one extended-regex pattern per line. Empty lines and lines starting
+# with `#` are ignored. Patterns are passed to `grep -E -f` against the bash
+# command string (quoted regions stripped first by the wrapper script).
+#
+# Match semantics: if ANY pattern matches the command, the command is treated
+# as a file-mutation and goes through the contract gate. The wrapper then
+# extracts affected paths and exempts /dev/null, /tmp/*, /var/folders/*,
+# /var/tmp/* — those are non-real-mutation targets.
+#
+# Tunable — add patterns ONLY when pilot logs show Claude actually emitting
+# them (don't pattern-match theoretical bypasses).
+
+# In-place editors
+(^|[[:space:]])sed[[:space:]]+(-[A-Za-z]*i|--in-place)
+(^|[[:space:]])perl[[:space:]]+(-[A-Za-z]*i|--inplace)
+(^|[[:space:]])awk[[:space:]]+-i[[:space:]]+inplace
+
+# Output redirects (>, >>, |&) — match a path token after the redirect
+# Note: we don't try to exempt /dev/null or /tmp here; the wrapper handles allowlist
+# via path-extraction. Any redirect to a non-allowlist path → block.
+# `;` is in the negated class so chained commands like `> file; other` don't
+# capture the semicolon as part of the path (would break exact-match exempt).
+[^|&<>][[:space:]]*>[[:space:]]*[^[:space:]&|<>;]+
+[^|&<>][[:space:]]*>>[[:space:]]*[^[:space:]&|<>;]+
+
+# File movers / copiers / deleters
+(^|[[:space:]])mv[[:space:]]
+(^|[[:space:]])cp[[:space:]]
+(^|[[:space:]])rsync[[:space:]]
+(^|[[:space:]])install[[:space:]]
+(^|[[:space:]])rm[[:space:]]
+(^|[[:space:]])rmdir[[:space:]]
+(^|[[:space:]])unlink[[:space:]]
+
+# Writers
+(^|[[:space:]])tee([[:space:]]|$)
+(^|[[:space:]])dd[[:space:]]+.*[[:space:]]of=
+
+# Archive extractors / patch appliers
+(^|[[:space:]])tar[[:space:]]+.*[[:space:]]-?-?x
+(^|[[:space:]])unzip([[:space:]]|$)
+(^|[[:space:]])patch[[:space:]]
+
+# Git working-tree mutations (per feedback-never-run-git-checkout memory)
+# ONLY path-bearing git ops belong here — the gate's job is contract file-SCOPE
+# enforcement, which needs a path argument to check against files_affected[].
+# Path-LESS tree/index ops (git stash pop, git reset --hard/--mixed, git clean
+# -f, git apply) were removed: they expose no governed path, so
+# they only ever produced "file path could not be extracted" false-positives
+# that blocked routine git plumbing. Destructive-op approval is a separate prose
+# rule, not this gate's concern. Chained REAL mutations after such an op (e.g.
+# `git stash pop && rm tracked.go`) are still caught via the trailing command.
+(^|[[:space:]])git[[:space:]]+checkout[[:space:]]+(--[[:space:]]|HEAD[[:space:]]+--)
+(^|[[:space:]])git[[:space:]]+restore([[:space:]]|$)
+(^|[[:space:]])git[[:space:]]+rm([[:space:]]|$)
+
+# File-creation / permission / link commands
+# Common Claude-emitted file mutations.
+(^|[[:space:]])mkdir([[:space:]]|$)
+(^|[[:space:]])touch([[:space:]]|$)
+(^|[[:space:]])chmod([[:space:]]|$)
+(^|[[:space:]])chown([[:space:]]|$)
+(^|[[:space:]])ln[[:space:]]+
+
+# Formatter / linter in-place modifiers (write back to source files)
+(^|[[:space:]])gofmt[[:space:]]+.*-w
+(^|[[:space:]])prettier[[:space:]]+.*--write
+(^|[[:space:]])ruff[[:space:]]+.*--fix
+(^|[[:space:]])eslint[[:space:]]+.*--fix
+(^|[[:space:]])black([[:space:]]|$)
+(^|[[:space:]])isort([[:space:]]|$)
+
+# Package-manager lockfile mutators
+(^|[[:space:]])go[[:space:]]+mod[[:space:]]+(tidy|edit|download)
+(^|[[:space:]])npm[[:space:]]+(install|i|update|uninstall|remove)
+(^|[[:space:]])yarn[[:space:]]+(add|install|upgrade|remove)
+(^|[[:space:]])pnpm[[:space:]]+(install|add|update|remove)
+(^|[[:space:]])composer[[:space:]]+(install|update|require|remove)
+(^|[[:space:]])cargo[[:space:]]+(update|add|remove)
+(^|[[:space:]])bundle[[:space:]]+(install|update)
+(^|[[:space:]])pip[[:space:]]+install

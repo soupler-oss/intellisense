@@ -1,0 +1,27 @@
+# Monthly version updates, one grouped PR per ecosystem, into develop. Security updates for known
+# vulnerabilities are separate: they are on in the repository's settings and open as soon as needed. Every
+# update PR runs the full test suite like any other; nothing merges untested.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: gomod
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: monthly
+    groups:
+      go:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore
+      include: scope

@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# hooks/post-commit
+#
+# post-commit — Phase 2 of the two-phase token cursor.
+# Runs after git successfully creates a commit. Single job: decide whether
+# the just-committed message matches what prepare-commit-msg (prepare-commit-msg) staged in
+# pending_cursor.
+#
+# Three-case decision tree:
+#   A) Session matches AND Claude-Tokens value matches expected   → promote cursor
+#   B) Session matches AND Claude-Tokens parseable but differs    → promote anyway,
+#      trusting the final committed token. Log informational drift.
+#   C) Tokens missing/unparseable OR Session changed              → mark
+#      corrupted_cursor, do NOT advance, block next intellisense commit (handled
+#      by prepare-commit-msg reading corrupted_cursor on next invocation).
+#
+
+set -uo pipefail
+
+# Workspace = current git repo (post-commit runs in repo dir by default)
+WS="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
+SESSION_DIR="$WS/.intellisense/session"
+
+POINTER="$SESSION_DIR/current-session-id"
+[[ -f "$POINTER" ]] || exit 0
+
+SID="$(cat "$POINTER" 2>/dev/null)"
+[[ -z "$SID" ]] && exit 0
+
+CURSOR_FILE="$SESSION_DIR/$SID.token-cursor.json"
+[[ -f "$CURSOR_FILE" ]] || exit 0
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+# If there's no pending_cursor to act on, nothing to do.
+HAS_PENDING="$(jq -r '.pending_cursor // empty' "$CURSOR_FILE" 2>/dev/null)"
+[[ -z "$HAS_PENDING" ]] && exit 0
+
+# Parse the actual final commit message.
+# Format is now a single Intellisense-Metadata JSON trailer.
+FINAL_MSG="$(git log -1 --format=%B HEAD 2>/dev/null || echo "")"
+# Extract via interpret-trailers --parse so body prose isn't mistaken for the
+# trailer. Falls back to grep on very old git.
+if git interpret-trailers --help >/dev/null 2>&1; then
+    FINAL_METADATA_LINE="$(echo "$FINAL_MSG" | git interpret-trailers --parse 2>/dev/null | grep '^Intellisense-Metadata:' | head -1 | sed 's/^Intellisense-Metadata: //')"
+else
+    FINAL_METADATA_LINE="$(echo "$FINAL_MSG" | grep '^Intellisense-Metadata:' | head -1 | sed 's/^Intellisense-Metadata: //')"
+fi
+
+FINAL_SESSION=""
+FINAL_TOKENS=""
+FINAL_AUTHOR_TYPE=""
+TOKEN_PARSEABLE=0
+if [[ -n "$FINAL_METADATA_LINE" ]]; then
+    # Try to parse the JSON. Extract session and tokens object.
+    FINAL_SESSION="$(echo "$FINAL_METADATA_LINE" | jq -r '.session // empty' 2>/dev/null)"
+    FINAL_TOKENS="$(echo "$FINAL_METADATA_LINE" | jq -c '.tokens // empty' 2>/dev/null)"
+    FINAL_AUTHOR_TYPE="$(echo "$FINAL_METADATA_LINE" | jq -r '.author_type // empty' 2>/dev/null)"
+    # Tokens are "parseable" if the JSON has all 5 integer fields
+    if [[ -n "$FINAL_TOKENS" ]] && echo "$FINAL_TOKENS" | jq -e \
+        'has("input") and has("output") and has("cache_creation") and has("cache_read") and has("total") and
+         (.input | type == "number") and (.output | type == "number") and
+         (.cache_creation | type == "number") and (.cache_read | type == "number") and
+         (.total | type == "number")' >/dev/null 2>&1; then
+        TOKEN_PARSEABLE=1
+    fi
+fi
+
+# only claude_with_intellisense commits participate in the two-phase token
+# cursor (prepare-commit-msg stages tokens for them). A claude_inline / merge /
+# squash / degraded-stub final means no tokens were staged for THIS commit, so
+# promoting OR corrupting on a (possibly stale) pending_cursor would be wrong —
+# notably a token-less claude_inline must NOT trip Case C corruption. No-op and
+# leave the cursor for the next real claude_with_intellisense commit. (A commit with NO
+# Intellisense-Metadata trailer at all falls through to the corruption path below — that
+# remains a genuine tamper signal.)
+if [[ -n "$FINAL_METADATA_LINE" && -n "$FINAL_AUTHOR_TYPE" && "$FINAL_AUTHOR_TYPE" != "claude_with_intellisense" ]]; then
+    exit 0
+fi
+
+EXPECTED_SESSION="$(jq -r '.pending_cursor.expected_session // empty' "$CURSOR_FILE")"
+EXPECTED_TOKENS="$(jq -c '.pending_cursor.expected_token_payload // empty' "$CURSOR_FILE")"
+
+CONFLICT_LOG="$HOME/.claude-intellisense/cursor-conflicts.log"
+mkdir -p "$(dirname "$CONFLICT_LOG")" 2>/dev/null || true
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+
+if [[ "$FINAL_SESSION" == "$EXPECTED_SESSION" && "$FINAL_TOKENS" == "$EXPECTED_TOKENS" ]]; then
+    # ─── CASE A: clean match ─── promote pending → committed
+    jq '.committed_cursor = {
+            last_processed_id: .pending_cursor.last_processed_id,
+            tokens_consumed_pre_cursor: .pending_cursor.tokens_consumed_pre_cursor
+        }
+        | del(.pending_cursor)
+        | del(.corrupted_cursor)' "$CURSOR_FILE" > "$CURSOR_FILE.tmp" \
+        && mv "$CURSOR_FILE.tmp" "$CURSOR_FILE"
+
+elif [[ "$FINAL_SESSION" == "$EXPECTED_SESSION" && "$TOKEN_PARSEABLE" == "1" ]]; then
+    # ─── CASE B: session intact, token value differs but parseable ─── promote anyway
+    jq '.committed_cursor = {
+            last_processed_id: .pending_cursor.last_processed_id,
+            tokens_consumed_pre_cursor: .pending_cursor.tokens_consumed_pre_cursor
+        }
+        | del(.pending_cursor)
+        | del(.corrupted_cursor)' "$CURSOR_FILE" > "$CURSOR_FILE.tmp" \
+        && mv "$CURSOR_FILE.tmp" "$CURSOR_FILE"
+    echo "[$NOW] informational drift on $HEAD_SHA: session intact, Claude-Tokens parseable but value differs (expected '$EXPECTED_TOKENS', got '$FINAL_TOKENS')" \
+        >> "$CONFLICT_LOG" 2>/dev/null || true
+
+else
+    # ─── CASE C: data corruption ─── move pending → corrupted, do NOT advance
+    jq '.corrupted_cursor = .pending_cursor | del(.pending_cursor)' "$CURSOR_FILE" > "$CURSOR_FILE.tmp" \
+        && mv "$CURSOR_FILE.tmp" "$CURSOR_FILE"
+    echo "[$NOW] DATA CORRUPTION on $HEAD_SHA: expected_session='$EXPECTED_SESSION' got='$FINAL_SESSION' token_parseable=$TOKEN_PARSEABLE. Next intellisense commit will block. Run: bash setup.sh --resolve-cursor" \
+        >> "$CONFLICT_LOG" 2>/dev/null || true
+fi
+
+exit 0

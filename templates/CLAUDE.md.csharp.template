@@ -1,0 +1,139 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: .NET {{STACK_VERSION}} with [ASP.NET Core Web API|Minimal APIs|Worker Service]
+- **ORM**: [Entity Framework Core|Dapper|none]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/csharp-patterns.md` — Naming, nullable references, async, EF Core transactions, DI
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+ASP.NET Core Web API handling order processing for the billing domain.
+Reads user profiles from auth-service; publishes payout events to a message bus.
+Entity Framework Core with explicit transactions and concurrency tokens for balance writes.
+Amounts are decimal; idempotency keys enforced by a unique index.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: src/Payments/PaymentService.cs] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/Auth/AuthHandler.cs] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `Program.cs` — host, DI registrations, middleware pipeline
+- `Controllers/` or `Endpoints/` — HTTP surface; thin, delegate to services
+- `Services/` — business logic and orchestration
+- `Data/` — `DbContext`, entity configurations, migrations
+- `Contracts/` or `Dtos/` — request/response shapes, validated at the boundary
+- `tests/` — xUnit/NUnit projects; integration tests against a real database
+
+Layers and their purpose:
+- `Controllers/` → Bind and validate, call a service, map results to responses
+- `Services/` → Business logic; no `DbContext` queries in controllers
+- `Data/` → All persistence; migrations reviewed as SQL
+- `tests/` → Real-persistence-path tests for P1/P2 (see `csharp-patterns.md`)
+
+## Upstream Dependencies
+
+[List services/repos this depends on. Example:]
+- `auth-service` — user identity, role lookup
+- `notification-service` — outbound email/SMS
+
+## Downstream Consumers
+
+[List services/repos that depend on this. Example:]
+- `web-frontend` — REST API consumer
+- `mobile-app` — REST API consumer
+- `analytics-pipeline` — reads outbound Kafka topic
+
+## Domain Terms
+
+[Service-specific glossary. Example:]
+- **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
+- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+
+## Run / Test / Build
+
+```bash
+# Restore
+dotnet restore --locked-mode
+
+# Build
+dotnet build --no-restore
+
+# Test
+dotnet test --no-build
+
+# Run
+dotnet run --project src/[Project]
+```
+
+## Known Gotchas
+
+[Service-specific quirks. Examples:]
+- **`.Result` / `.Wait()`**: blocking on a task in request code starves the thread pool. See `csharp-patterns.md §Async`.
+- **Scoped into singleton**: injecting `DbContext` into a singleton shares one context across requests.
+- **EF in-memory provider** ignores transactions and constraints; test locking against a real database.

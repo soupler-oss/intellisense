@@ -1,0 +1,1202 @@
+#!/bin/bash
+
+# intellisense pre-push Hook: Three-Tier Enforcement (Fork Workflow + Artifact Validation)
+# Installed automatically by setup.sh and setup-repos.sh
+# Phases: Phase 0 (fork check) + Phase 1 (tier-based intellisense enforcement)
+
+set -o pipefail
+
+# PATH normalization (inlined from scripts/lib/intellisense-paths.sh::_ensure_local_bin_on_path).
+# Git strips the environment when invoking hooks, so even when bd / code-review-graph
+# are installed at ~/.local/bin or a brew prefix, `command -v` can fail to find them.
+# Inlined (not sourced) because this hook is copied into per-repo .git/hooks/ —
+# the lib file is not reachable from the destination path. Keep in sync with
+# scripts/lib/intellisense-paths.sh.
+for _intellisense_path_candidate in \
+    "$HOME/.local/bin" \
+    /opt/homebrew/bin \
+    /usr/local/bin \
+    /home/linuxbrew/.linuxbrew/bin
+do
+    [ -d "$_intellisense_path_candidate" ] || continue
+    case ":$PATH:" in
+        *":$_intellisense_path_candidate:"*) ;;
+        *) PATH="$_intellisense_path_candidate:$PATH" ;;
+    esac
+done
+unset _intellisense_path_candidate
+export PATH
+
+REMOTE="$1"
+REMOTE_URL="$2"
+
+# =============================================================================
+# PHASE 0: FORK ENFORCEMENT (Always runs)
+# =============================================================================
+
+UPSTREAM_URL=$(git remote get-url upstream 2>/dev/null || echo "")
+
+# Block 1: Never push to a remote named 'upstream'
+if [ "$REMOTE" = "upstream" ]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║  intellisense FORK ENFORCEMENT: Push Blocked             ║"
+    echo "╠══════════════════════════════════════════════════╣"
+    echo "║  Direct push to 'upstream' is not allowed.       ║"
+    echo "║  'upstream' = the main org repo (read-only).     ║"
+    echo "║                                                  ║"
+    echo "║  Push to your fork instead:                      ║"
+    echo "║    git push origin <branch-name>                 ║"
+    echo "║  Then raise a PR from your fork.                 ║"
+    echo "║                                                  ║"
+    echo "║  See: git-workflow.md → Fork Workflow            ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo ""
+    exit 1
+fi
+
+# Block 2: If origin URL == upstream URL, remotes are misconfigured
+if [ -n "$UPSTREAM_URL" ] && [ "$REMOTE_URL" = "$UPSTREAM_URL" ]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║  intellisense FORK ENFORCEMENT: Auto-Detecting Fix       ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo ""
+
+    # Phase 0: Automatic environment detection (prefer before user interruption)
+    GITHUB_USER=""
+    REPO_NAME=""
+    AUTO_FIX_ATTEMPTED=false
+
+    # Attempt 1: gh CLI (machine-readable API, not text-parsed auth status)
+    if command -v gh &>/dev/null; then
+        GH_USER=$(gh api user --jq .login 2>/dev/null || echo "")
+        if [ -n "$GH_USER" ]; then
+            GITHUB_USER="$GH_USER"
+            # Extract repo name from upstream URL (last part before .git)
+            REPO_NAME=$(echo "$UPSTREAM_URL" | sed 's|.*/\([^/]*\)\.git$|\1|' || echo "")
+            if [ -n "$REPO_NAME" ]; then
+                AUTO_FIX_ATTEMPTED=true
+            fi
+        fi
+    fi
+
+    # Attempt 2: Check git config for stored GitHub username (global first, then local)
+    STORED_GITHUB_USER=$(git config --global --get github.username 2>/dev/null || git config --get github.username 2>/dev/null || echo "")
+    if [ -n "$STORED_GITHUB_USER" ]; then
+        GITHUB_USER="$STORED_GITHUB_USER"
+        REPO_NAME=$(git config --get remote.upstream.url 2>/dev/null | sed 's|.*/\([^/]*\)\.git$|\1|' || echo "")
+        [ -n "$REPO_NAME" ] && AUTO_FIX_ATTEMPTED=true
+    fi
+
+    # Print suggestion if detection successful (no auto-mutation)
+    if [ "$AUTO_FIX_ATTEMPTED" = true ] && [ -n "$GITHUB_USER" ] && [ -n "$REPO_NAME" ]; then
+        NEW_ORIGIN="git@github.com:${GITHUB_USER}/${REPO_NAME}.git"
+        echo "✓ Detected GitHub user: $GITHUB_USER"
+        echo "✓ Detected repo: $REPO_NAME"
+        echo ""
+        echo "To fix, run:"
+        echo "  git remote set-url origin $NEW_ORIGIN"
+        echo "  git push origin <branch-name>"
+        echo ""
+    else
+        # Username unknown: still show the exact fix, with a placeholder.
+        REPO_NAME=$(echo "$UPSTREAM_URL" | sed 's|.*/\([^/]*\)\.git$|\1|; s|.*/\([^/]*\)$|\1|')
+        echo "To fix, point origin at your fork:"
+        echo "  git remote set-url origin git@github.com:<your-github-username>/${REPO_NAME:-<repo>}.git"
+        echo ""
+    fi
+
+    # Manual fix required: store GitHub username in git config
+    echo "❌ BLOCKED: Fork enforcement requires GitHub username"
+    echo ""
+    echo "Store your username with:"
+    echo "  git config --global github.username <your-github-username>"
+    echo ""
+    echo "Or use gh CLI:"
+    echo "  gh auth login"
+    echo ""
+    exit 1
+fi
+
+# Warn if no upstream configured (fork workflow may not be set up)
+if [ -z "$UPSTREAM_URL" ]; then
+    echo "⚠️  intellisense WARNING: No 'upstream' remote configured."
+    echo "   If this is a forked repo, add upstream with:"
+    echo "   git remote add upstream git@github.com:<owner>/<repo>.git"
+    echo ""
+fi
+
+# =============================================================================
+# PHASE 1: TIER-BASED intellisense ENFORCEMENT
+# =============================================================================
+
+# Get current branch name
+BRANCH=$(git branch --show-current 2>/dev/null || echo "<branch-name>")
+
+# Phase 1: Enforcement active. No silent bypasses. Use explicit operational exceptions only.
+# Bypass policy: configure fork correctly → push normally. If emergency override needed,
+# require written approval in commit/PR discussion (not hidden env variables).
+
+# Detect default branch with fallback (try main, master, develop)
+DEFAULT_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+if [ -z "$DEFAULT_BRANCH" ] || [ "$DEFAULT_BRANCH" = "refs/remotes/origin/HEAD" ]; then
+    # Fallback: try common defaults in order
+    for branch in "main" "master" "develop"; do
+        if git rev-parse "origin/$branch" &>/dev/null 2>&1; then
+            DEFAULT_BRANCH="$branch"
+            break
+        fi
+    done
+    # Final fallback if none found
+    [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH="master"
+fi
+
+# Validate that origin/$DEFAULT_BRANCH exists (fresh clone fallback)
+if ! git rev-parse "origin/$DEFAULT_BRANCH" &>/dev/null; then
+    echo "⚠️  intellisense: origin/$DEFAULT_BRANCH not found (fresh clone?). Skipping intellisense enforcement."
+    exit 0
+fi
+
+#Scan baseline. Prefer upstream/<default> when its remote-tracking
+# ref exists, so commits already merged/rebased in from upstream (already reviewed
+# there) are NOT re-scanned for tier classification or per-commit trailers. Fall
+# back to origin/<default> (today's behaviour) when no upstream remote is present.
+#
+# Fail-safe: switching to upstream/<default> only EXCLUDES commits that are already
+# on upstream/<default>; a developer's own unpushed commits are never ancestors of
+# upstream/<default>, so a genuine Tier 2 change can never be hidden by this. When
+# upstream is unresolved we keep the (wider) origin baseline — never narrower than
+# before. Every range consumer below uses $RANGE_BASE for a single source of truth.
+RANGE_BASE="origin/$DEFAULT_BRANCH"
+if git rev-parse --verify "upstream/$DEFAULT_BRANCH" >/dev/null 2>&1; then
+    RANGE_BASE="upstream/$DEFAULT_BRANCH"
+fi
+
+# Get list of changed files (committed, not staged)
+CHANGED_FILES=$(git diff --name-only "$RANGE_BASE...HEAD" 2>/dev/null | sort -u)
+
+# If no files changed, allow push (detached HEAD or same commit)
+if [ -z "$CHANGED_FILES" ]; then
+    exit 0
+fi
+
+# =============================================================================
+# TIER DETECTION — asked of the intellisense engine (`intellisense classify`).
+#
+# The engine (internal/tier) is the only tier model: it reads this repository's .intellisense.yml, so a
+# push, an in-session edit and CI all get the same tier. This hook is copied into .git/hooks/ and cannot
+# source scripts/lib, so it carries only the lookup below — no path rules of its own.
+# =============================================================================
+
+_intellisense_engine() {
+    local candidate
+    for candidate in "${INTELLISENSE_BIN:-}" "${INTELLISENSE_HOME:-$HOME/.intellisense}/bin/intellisense"; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    command -v intellisense 2>/dev/null
+}
+
+INTELLISENSE_ENGINE="$(_intellisense_engine)"
+if [ -z "$INTELLISENSE_ENGINE" ]; then
+    echo "❌ BLOCKED: the intellisense engine is not installed, so this push cannot be checked." >&2
+    echo "   Fix: intellisense live install   (or put the intellisense binary on PATH; see INSTALLATION.md)" >&2
+    exit 1
+fi
+
+# _engine_tier_of_paths: newline-separated paths on stdin → their tier (path rules + policy floor).
+_engine_tier_of_paths() {
+    local path n=0
+    set --
+    while IFS= read -r path || [ -n "$path" ]; do
+        [ -z "$path" ] && continue
+        set -- "$@" "$path"
+        n=$((n + 1))
+    done
+    [ "$n" -eq 0 ] && { echo 0; return 0; }
+    "$INTELLISENSE_ENGINE" classify --tier-only "$@" 2>/dev/null || echo 1
+}
+
+if ! _CLASSIFY_JSON="$("$INTELLISENSE_ENGINE" classify --format json --base "$RANGE_BASE" --head HEAD 2>&1)"; then
+    echo "❌ BLOCKED: intellisense could not classify this push:" >&2
+    echo "   $_CLASSIFY_JSON" >&2
+    exit 1
+fi
+TIER="$(printf '%s' "$_CLASSIFY_JSON" | jq -r '.tier')"
+TIER_NAME="$(printf '%s' "$_CLASSIFY_JSON" | jq -r '.tier_name')"
+case "$TIER" in [0-9]) ;; *) TIER=1 ;; esac
+# Files that set the tier, as file|reason|pattern (shown when the push is Tier 1+).
+TIER_TRIGGERS=()
+while IFS= read -r _trigger; do
+    [ -n "$_trigger" ] && TIER_TRIGGERS+=("$_trigger")
+done < <(printf '%s' "$_CLASSIFY_JSON" | jq -r '.path_tier as $t | .files[] | select($t > 0 and .tier == $t) | "\(.path)|\(.reason // "")|\(.pattern // "default_tier")"')
+unset _trigger
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH FRESHNESS BACKSTOP (plan v7) — MANDATORY, FAIL-OPEN
+#
+# Runs for EVERY non-empty push (all tiers) — the required backstop for edits
+# the pre-edit gate cannot see (raw-Bash first edits, etc.). BEST AVAILABLE
+# coverage, NOT full coverage: it does NOT catch `git push --no-verify`, pushes
+# to a non-tracked/other remote, or work that is never pushed (local-only).
+# Those residual gaps are accepted and documented (plan N4/I2).
+#
+#   I1 — FAIL-OPEN on INFRA: any resolve/fetch/verify failure (offline, timeout,
+#        missing remote, ref absent after fetch, git/jq missing, lib unreachable)
+#        → warn and ALLOW the push. NEVER block on an infra failure.
+#   I7 — CONFIG ERROR is distinct from infra: a malformed EXPLICIT manifest
+#        integration_ref blocks in `enforced` (config-error message), warns
+#        otherwise. (A deterministic, local, developer-fixable defect — not a
+#        transient network condition.)
+#   I5 — no live `gh` by default (push latency): resolution prefers manifest →
+#        cached session-marker ref → inferred. Live gh only if
+#        intellisense.sync_pr_lookup_in_prepush=true.
+#   I8 — the cached ref is a DISCOVERY shortcut only: `behind` is ALWAYS computed
+#        against a fresh bounded fetch + rev-parse --verify, never stale state.
+#
+# Sources the SAME scripts/lib/sync-ref.sh as the PreToolUse gate (plan I4), so
+# the two gates resolve identical (ref, confidence) for any repo state.
+# ─────────────────────────────────────────────────────────────────────────────
+sync_prepush_freshness() {
+    [ "${INTELLISENSE_SKIP_SYNC_CHECK:-0}" = "1" ] && return 0
+    local settings repo lib setup
+    settings="${INTELLISENSE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    [ -n "$repo" ] || return 0
+
+    lib="${INTELLISENSE_SYNC_REF_LIB:-}"
+    if [ -z "$lib" ]; then
+        setup="$(_resolve_intellisense_setup_path 2>/dev/null || echo "")"
+        [ -n "$setup" ] && lib="$setup/scripts/lib/sync-ref.sh"
+    fi
+    # Fail-open: library unreachable → cannot check → allow.
+    [ -n "$lib" ] && [ -f "$lib" ] || return 0
+    # shellcheck source=../scripts/lib/sync-ref.sh
+    . "$lib" 2>/dev/null || return 0
+    command -v sync_enforcement_mode >/dev/null 2>&1 || return 0
+
+    local mode; mode="$(sync_enforcement_mode "$settings")"
+    [ "$mode" = "off" ] && return 0
+
+    local allow_gh=0
+    [ "$(sync_pr_lookup_in_prepush "$settings")" = "true" ] && allow_gh=1
+    local eoi; eoi="$(sync_enforce_on_inferred "$settings")"
+
+    local rec st conf remote branch
+    rec="$(sync_resolve_integration_ref "$repo" "$allow_gh")"
+    st="$(sync_rec_status "$rec")"
+    conf="$(sync_rec_confidence "$rec")"
+    remote="$(sync_rec_remote "$rec")"
+    branch="$(sync_rec_branch "$rec")"
+
+    # I7: malformed EXPLICIT manifest ref = config error (NOT infra).
+    if [ "$st" = "config_error" ]; then
+        local shown="${remote}${branch:+/$branch}"
+        if [ "$mode" = "enforced" ]; then
+            echo "" >&2
+            echo "❌ BLOCKED: .intellisense/manifest.json integration_ref is invalid ('$shown')." >&2
+            echo "   This is a CONFIG error (not a network problem). Fix it to a valid" >&2
+            echo "   remote/branch that passes 'git check-ref-format', or remove the key." >&2
+            echo "" >&2
+            return 1
+        fi
+        echo "⚠️  intellisense sync: .intellisense/manifest.json integration_ref invalid ('$shown') — config error; freshness skipped (mode=$mode)." >&2
+        return 0
+    fi
+
+    # I1: infra / unresolvable → warn + allow, never block.
+    if [ "$st" != "ok" ]; then
+        echo "⚠️  intellisense sync: could not resolve an integration ref (status=$st); freshness skipped (fail-open)." >&2
+        return 0
+    fi
+
+    # I5: prefer cached session-marker ref over inferred/guessed (avoids gh).
+    if [ "$conf" != "explicit" ]; then
+        local cached cconf crem cbr
+        cached="$(sync_read_cached_ref "$repo" "$settings")"
+        if [ -n "$cached" ]; then
+            cconf="$(printf '%s' "$cached" | cut -f1)"
+            crem="$(printf '%s' "$cached" | cut -f2)"
+            cbr="$(printf '%s' "$cached" | cut -f3)"
+            if [ -n "$crem" ] && [ -n "$cbr" ]; then
+                conf="$cconf"; remote="$crem"; branch="$cbr"
+            fi
+        fi
+    fi
+
+    # Targeting nudge: inference/guess targets the repo default; for release-branch
+    # workflows the dev must pin .intellisense/manifest.json integration_ref (Case 3).
+    if [ "$conf" != "explicit" ]; then
+        echo "⚠️  intellisense sync: integration target '$remote/$branch' resolved by $conf. If you merge into a non-default branch, set .intellisense/manifest.json integration_ref." >&2
+    fi
+
+    # I8: ALWAYS fetch fresh + verify before counting behind.
+    local behind; behind="$(sync_fetch_and_behind "$repo" "$remote" "$branch")"
+    if [ "$behind" = "infra" ]; then
+        echo "⚠️  intellisense sync: bounded fetch/verify of $remote/$branch failed; freshness skipped (fail-open)." >&2
+        return 0
+    fi
+    [ "$behind" = "0" ] && return 0
+
+    # behind > 0
+    local decision; decision="$(sync_should_block "$mode" "$conf" "$eoi")"
+    local dirty="" dirtyline=""
+    git -C "$repo" diff --quiet 2>/dev/null || dirty=1
+    git -C "$repo" diff --cached --quiet 2>/dev/null || dirty=1
+    [ -n "$dirty" ] && dirtyline="   If your working tree is dirty, commit or stash manually first, then run fetch/rebase."
+
+    if [ "$decision" = "block" ]; then
+        echo "" >&2
+        echo "❌ BLOCKED: your branch is $behind commit(s) behind $remote/$branch (the branch you will merge INTO)." >&2
+        echo "   Update before pushing:" >&2
+        echo "     git fetch $remote $branch" >&2
+        echo "     git rebase $remote/$branch" >&2
+        [ -n "$dirtyline" ] && echo "$dirtyline" >&2
+        echo "   (confidence=$conf, mode=enforced. Downgrade with intellisense.sync_enforcement=warn.)" >&2
+        echo "" >&2
+        return 1
+    fi
+
+    echo "⚠️  intellisense sync: your branch is $behind commit(s) behind $remote/$branch. Consider: git fetch $remote $branch && git rebase $remote/$branch (mode=$mode, confidence=$conf)." >&2
+    [ -n "$dirtyline" ] && echo "$dirtyline" >&2
+    return 0
+}
+
+# Mandatory backstop — runs for all tiers before tier-specific enforcement.
+if ! sync_prepush_freshness; then
+    exit 1
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Allowlist support (trailer-presence enforcement)
+#
+# .intellisense/exception-allowlist.yaml exempts specific commit SHAs from
+# Intellisense-Metadata enforcement, with full governance — required because some
+# commits legitimately lack trailers (commits made before intellisense was installed, bot commits, external
+# contributors, machines where the prepare-commit-msg hook isn't installed).
+#
+# Per-entry schema (YAML list, one block per commit):
+#   - sha: <40-char SHA>
+#     reason: "<non-empty rationale>"
+#     expiry: "YYYY-MM-DD"          # must be in future, ≤ 90d from today
+#     added_by: "approver@example"  # cannot equal commit author (no self-approval)
+#
+# Return codes (caller dispatches on these):
+#   0 — allowlisted, governance OK   → caller should SKIP metadata enforcement
+#   1 — not on allowlist             → caller should proceed with normal check
+#   2 — allowlisted BUT governance failed → caller MUST block
+#       (function prints the specific failure reason to stderr)
+#
+# YAML parsing is line-based (not full YAML) because schema is fixed; avoids
+# the python/yq dependency. Bash-portable date math (macOS BSD + GNU).
+# ─────────────────────────────────────────────────────────────────────────────
+_allowlist_check() {
+    local sha="$1"
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+    local file="$repo_root/.intellisense/exception-allowlist.yaml"
+    [ -f "$file" ] || return 1
+
+    # Extract the entry block for this SHA. awk scans lines; once it sees
+    # "- sha: <target>" it captures the following 2-space-indented field
+    # lines until the next top-level "- sha:" or EOF.
+    local entry
+    entry="$(awk -v target="$sha" '
+        /^- *sha:/ {
+            line=$0
+            sub(/^- *sha:[[:space:]]*/, "", line)
+            gsub(/"/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            if (line == target) { capture=1; print "sha: " target; next }
+            capture=0; next
+        }
+        capture && /^  +(reason|expiry|added_by):/ { print }
+        capture && /^- *sha:/                       { capture=0 }
+    ' "$file" 2>/dev/null)"
+
+    [ -z "$entry" ] && return 1
+
+    # Extract fields. Strip surrounding quotes + trailing whitespace.
+    local reason expiry added_by
+    reason="$(echo "$entry" | awk -F':' '/^[[:space:]]*reason:/  {sub(/^[[:space:]]*reason:[[:space:]]*/, ""); gsub(/"/, ""); sub(/[[:space:]]+$/, ""); print}')"
+    expiry="$(echo "$entry" | awk -F':' '/^[[:space:]]*expiry:/  {sub(/^[[:space:]]*expiry:[[:space:]]*/, ""); gsub(/"/, ""); sub(/[[:space:]]+$/, ""); print}')"
+    added_by="$(echo "$entry" | awk -F':' '/^[[:space:]]*added_by:/ {sub(/^[[:space:]]*added_by:[[:space:]]*/, ""); gsub(/"/, ""); sub(/[[:space:]]+$/, ""); print}')"
+
+    # Governance: reason required and non-empty
+    if [ -z "$reason" ]; then
+        echo "❌ BLOCKED: allowlist entry for $sha missing required 'reason' field" >&2
+        return 2
+    fi
+
+    # Governance: expiry required
+    if [ -z "$expiry" ]; then
+        echo "❌ BLOCKED: allowlist entry for $sha missing required 'expiry' field" >&2
+        return 2
+    fi
+
+    # Portable date math: try BSD then GNU.
+    local today_epoch expiry_epoch
+    if expiry_epoch=$(date -u -j -f "%Y-%m-%d" "$expiry" +%s 2>/dev/null); then
+        : # BSD (macOS)
+    elif expiry_epoch=$(date -u -d "$expiry" +%s 2>/dev/null); then
+        : # GNU (Linux)
+    else
+        echo "❌ BLOCKED: allowlist entry for $sha has unparseable expiry '$expiry' (need YYYY-MM-DD)" >&2
+        return 2
+    fi
+    today_epoch=$(date -u +%s)
+    # 90 days in seconds = 90 * 86400 = 7776000
+    local cap_epoch=$((today_epoch + 7776000))
+
+    if [ "$expiry_epoch" -lt "$today_epoch" ]; then
+        echo "❌ BLOCKED: allowlist entry for $sha is expired (expiry=$expiry)" >&2
+        return 2
+    fi
+    if [ "$expiry_epoch" -gt "$cap_epoch" ]; then
+        echo "❌ BLOCKED: allowlist entry for $sha has expiry >90 days from today (expiry=$expiry exceeds 90-day cap)" >&2
+        return 2
+    fi
+
+    # Governance: self-approval blocked (commit author cannot also be approver)
+    local commit_author
+    commit_author="$(git log -1 --format=%ae "$sha" 2>/dev/null)"
+    if [ -n "$added_by" ] && [ -n "$commit_author" ] && [ "$added_by" = "$commit_author" ]; then
+        echo "❌ BLOCKED: allowlist entry for $sha is self-approval (same author cannot be both committer and approver: $added_by)" >&2
+        return 2
+    fi
+
+    # Allowlisted + all governance passed
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# tier-aware intellisense trailer validation (pilot warn / enforced block)
+#
+# Inspects each pushed commit's own `Intellisense-Tier:` trailer (declared by prepare-commit-msg's
+# prepare-commit-msg) and validates the expected trailer set is present:
+#   Tier 0   → 5 trailers (Intellisense-Tier, Intellisense-Mode, Intellisense-Session, Intellisense-Version, Claude-Tokens)
+#   Tier 1/2 → 8 trailers (the above + Intellisense-Skills, Intellisense-Rules-Expected, Intellisense-Agents)
+#   No Intellisense-Tier trailer → non-intellisense commit, skip validation
+#
+# Pilot mode: warns to stderr + logs to ~/.claude-intellisense/trailer-drift.log
+# Enforced  : blocks the push (exits 1)
+#
+# Defined here (before the tier-block exits) so the tier blocks can call it.
+# ─────────────────────────────────────────────────────────────────────────────
+intellisense_validate_new_trailer_set() {
+    # Nested helper: derive the path-tier implied by a list of
+    # files on stdin. Defined inside the function so the test harness (which
+    # sed-extracts just this function) keeps it self-contained. Mirrors
+    # prepare-commit-msg and the PR validator so the inline-tier guard agrees.
+    _derive_commit_path_tier() {
+        _engine_tier_of_paths
+    }
+    local gate_mode="pilot"
+    # Env var takes precedence over settings.json (used by tests + scripted
+    # enforcement). Settings.json path retained as the steady-state source.
+    if [ -n "${INTELLISENSE_GATE_MODE:-}" ]; then
+        gate_mode="$INTELLISENSE_GATE_MODE"
+    else
+        local settings_file="$HOME/.claude/settings.json"
+        if command -v jq >/dev/null 2>&1 && [ -f "$settings_file" ]; then
+            local g
+            g="$(jq -r '.intellisense.gate_mode // "pilot"' "$settings_file" 2>/dev/null)"
+            [ -n "$g" ] && gate_mode="$g"
+        fi
+    fi
+
+    # Use the same default-branch-derived range that
+    # the rest of this hook uses (CHANGED_FILES at line ~156). The earlier
+    # draft read LOCAL_SHA / REMOTE_SHA as env vars — they're never set;
+    # git's pre-push protocol provides ref info on stdin, NOT env. Using
+    # $RANGE_BASE..HEAD walks every commit being pushed (: baseline
+    # prefers upstream/<default> so synced upstream commits are not re-scanned), so
+    # multi-commit pushes can't hide missing trailers in earlier commits. Default
+    # to origin/<default> so the function stays self-contained if RANGE_BASE is
+    # unset (e.g. unit-extracted in isolation) — same value the top-level computes.
+    local range_base="${RANGE_BASE:-origin/$DEFAULT_BRANCH}"
+    local range="${range_base}..HEAD"
+    if ! git rev-parse --verify "$range_base" >/dev/null 2>&1; then
+        # New branch or no upstream tracking — walk just HEAD as a safety
+        # fallback. Better than silently checking 0 commits.
+        range="HEAD~0..HEAD"
+    fi
+
+    local drift_log="$HOME/.claude-intellisense/trailer-drift.log"
+    mkdir -p "$(dirname "$drift_log")" 2>/dev/null || true
+
+    local total_checked=0 total_drift=0
+    local declared_tier missing_trailers metadata_line
+    local sha msg
+    while read -r sha; do
+        [ -z "$sha" ] && continue
+        msg="$(git log -1 --format=%B "$sha" 2>/dev/null)"
+
+        # allowlist precedence. If this commit is on the
+        # .intellisense/exception-allowlist.yaml with passing governance, skip
+        # metadata enforcement entirely. If allowlisted but governance fails,
+        # block immediately — allowlist abuse is worse than missing trailer.
+        _allowlist_check "$sha"
+        local _al_rc=$?
+        case "$_al_rc" in
+            0) continue ;;     # allowlisted, governance OK
+            2) return 1 ;;     # allowlisted but governance failed (_allowlist_check printed reason)
+            1) ;;              # not on allowlist, proceed with normal check
+        esac
+
+        # duplicate Intellisense-Metadata trailers are ambiguous and
+        # rejected. interpret-trailers --parse only sees the trailer block,
+        # so this count is accurate (not fooled by body text mentioning the
+        # field name). Falls back to grep when interpret-trailers is not on
+        # PATH (very old git) — same intent, less precise on multi-line trailers.
+        local _md_count
+        if command -v git >/dev/null 2>&1 && git interpret-trailers --help >/dev/null 2>&1; then
+            _md_count="$(echo "$msg" | git interpret-trailers --parse 2>/dev/null | grep -c '^Intellisense-Metadata:')"
+        else
+            _md_count="$(echo "$msg" | grep -c '^Intellisense-Metadata:')"
+        fi
+        if [ "$_md_count" -gt 1 ]; then
+            echo "❌ BLOCKED: commit $sha has $_md_count Intellisense-Metadata trailers (duplicates ambiguous; must have exactly one)" >&2
+            echo "   Fix: amend commit to keep a single Intellisense-Metadata trailer." >&2
+            return 1
+        fi
+
+        # One Intellisense-Metadata JSON trailer per commit.
+        # Extract via interpret-trailers --parse (falls back to grep when unavailable)
+        # so body prose / quoted JSON starting with "Intellisense-Metadata:" is not
+        # mistaken for a real trailer.
+        if command -v git >/dev/null 2>&1 && git interpret-trailers --help >/dev/null 2>&1; then
+            metadata_line="$(echo "$msg" | git interpret-trailers --parse 2>/dev/null | grep '^Intellisense-Metadata:' | head -1 | sed 's/^Intellisense-Metadata: //')"
+        else
+            metadata_line="$(echo "$msg" | grep '^Intellisense-Metadata:' | head -1 | sed 's/^Intellisense-Metadata: //')"
+        fi
+        if [ -n "$metadata_line" ] && command -v jq >/dev/null 2>&1; then
+            # Parse-check first: malformed JSON in the trailer is a real
+            # failure, not a silent pass.
+            if ! echo "$metadata_line" | jq -e . >/dev/null 2>&1; then
+                total_checked=$((total_checked + 1))
+                missing_trailers=" (malformed JSON in Intellisense-Metadata trailer)"
+                declared_tier="?"
+                # Fall through to the missing-trailers reporting below
+                if [ -n "$missing_trailers" ]; then
+                    total_drift=$((total_drift + 1))
+                    local now2
+                    now2="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    echo "[$now2] commit=$sha tier=? missing=$missing_trailers gate=$gate_mode" \
+                        >> "$drift_log" 2>/dev/null || true
+                    if [ "$gate_mode" = "enforced" ]; then
+                        echo "❌ BLOCKED (the metadata check enforced): commit $sha malformed Intellisense-Metadata JSON: $missing_trailers" >&2
+                        echo "   Fix: amend the commit and re-emit the trailer via prepare-commit-msg." >&2
+                        return 1
+                    else
+                        echo "⚠ [intellisense pilot] commit $sha malformed Intellisense-Metadata JSON: $missing_trailers" >&2
+                    fi
+                fi
+                continue
+            fi
+            # Trailers branch by author_type.
+            local schema_v
+            schema_v="$(echo "$metadata_line" | jq -r '.v // empty' 2>/dev/null)"
+            if [ "$schema_v" = "1" ]; then
+                local author_type cls_state
+                author_type="$(echo "$metadata_line" | jq -r '.author_type // empty' 2>/dev/null)"
+                [ -z "$author_type" ] && continue
+                total_checked=$((total_checked + 1))
+                missing_trailers=""
+                # Every trailer needs these
+                for field in v author_type commit_kind stamping_source; do
+                    echo "$metadata_line" | jq -e --arg f "$field" 'has($f)' >/dev/null 2>&1 \
+                        || missing_trailers="$missing_trailers $field"
+                done
+                # Per-author_type additional requirements
+                case "$author_type" in
+                    merge|squash|no_session_signal)
+                        : # baseline already enforced (squash included)
+                        ;;
+                    claude_with_intellisense)
+                        # session always required for Claude-context commits
+                        echo "$metadata_line" | jq -e 'has("session")' >/dev/null 2>&1 \
+                            || missing_trailers="$missing_trailers session"
+                        # If classification_state=ok (fully-classified), enforce full Claude fields
+                        cls_state="$(echo "$metadata_line" | jq -r '.classification_state // "ok"' 2>/dev/null)"
+                        if [ "$cls_state" = "ok" ]; then
+                            for field in tier mode version tokens; do
+                                echo "$metadata_line" | jq -e --arg f "$field" 'has($f)' >/dev/null 2>&1 \
+                                    || missing_trailers="$missing_trailers $field"
+                            done
+                            declared_tier="$(echo "$metadata_line" | jq -r '.tier // 0' 2>/dev/null)"
+                            if [ "$declared_tier" != "0" ]; then
+                                for field in skills rules_expected agents; do
+                                    echo "$metadata_line" | jq -e --arg f "$field" 'has($f)' >/dev/null 2>&1 \
+                                        || missing_trailers="$missing_trailers $field"
+                                done
+                            fi
+                            for tf in input output cache_creation cache_read total; do
+                                echo "$metadata_line" | jq -e --arg f "$tf" \
+                                    '.tokens[$f] // empty | type == "number"' >/dev/null 2>&1 \
+                                    || missing_trailers="$missing_trailers tokens.$tf"
+                            done
+                        fi
+                        # Degraded states (missing|unavailable|corrupt) — no further fields required
+                        ;;
+                    claude_inline)
+                        # agent-written, hooksPath-independent trailer.
+                        # Two-contract model: source fields are value-checked so
+                        # inline can't masquerade as hook-stamped/merge. Tokens are
+                        # NOT required (Claude can't compute them) and REJECTED if
+                        # present. Tier must not under-state max(path, policy floor).
+                        echo "$metadata_line" | jq -e 'has("session")' >/dev/null 2>&1 \
+                            || missing_trailers="$missing_trailers session"
+                        local inline_tier inline_ck inline_ss
+                        inline_tier="$(echo "$metadata_line" | jq -r '.tier // 0' 2>/dev/null)"
+                        inline_ck="$(echo "$metadata_line" | jq -r '.commit_kind // empty' 2>/dev/null)"
+                        inline_ss="$(echo "$metadata_line" | jq -r '.stamping_source // empty' 2>/dev/null)"
+                        for field in tier mode version; do
+                            echo "$metadata_line" | jq -e --arg f "$field" 'has($f)' >/dev/null 2>&1 \
+                                || missing_trailers="$missing_trailers $field"
+                        done
+                        [ "$inline_ck" = "single" ] || missing_trailers="$missing_trailers (commit_kind-must-be-single)"
+                        [ "$inline_ss" = "agent_inline" ] || missing_trailers="$missing_trailers (stamping_source-must-be-agent_inline)"
+                        if [ "$inline_tier" != "0" ]; then
+                            for field in skills agents rules_expected; do
+                                echo "$metadata_line" | jq -e --arg f "$field" 'has($f)' >/dev/null 2>&1 \
+                                    || missing_trailers="$missing_trailers $field"
+                            done
+                        fi
+                        if echo "$metadata_line" | jq -e 'has("tokens")' >/dev/null 2>&1; then
+                            missing_trailers="$missing_trailers (claude_inline-must-not-carry-tokens)"
+                        fi
+                        case "$inline_tier" in 0|1|2) ;; *) inline_tier=0 ;; esac
+                        local inline_path_tier inline_policy_tier inline_floor inline_repo
+                        inline_path_tier="$(git diff-tree --no-commit-id --name-only -r --root "$sha" 2>/dev/null | _derive_commit_path_tier)"
+                        inline_path_tier="${inline_path_tier:-0}"
+                        inline_policy_tier=0
+                        inline_repo="$(git rev-parse --show-toplevel 2>/dev/null)"
+                        if [ -n "$inline_repo" ] && [ -f "$inline_repo/.intellisense/manifest.json" ]; then
+                            inline_policy_tier="$(jq -r '.policy_minimum_tier // 0' "$inline_repo/.intellisense/manifest.json" 2>/dev/null)"
+                            case "$inline_policy_tier" in 0|1|2) ;; *) inline_policy_tier=0 ;; esac
+                        fi
+                        inline_floor="$inline_path_tier"
+                        [ "$inline_policy_tier" -gt "$inline_floor" ] 2>/dev/null && inline_floor="$inline_policy_tier"
+                        if [ "$inline_tier" -lt "$inline_floor" ] 2>/dev/null; then
+                            missing_trailers="$missing_trailers (inline-tier-$inline_tier-below-floor-$inline_floor)"
+                        fi
+                        # Co-author guard (§3.7, fail-closed): without Claude
+                        # author/co-author evidence, refuse to attribute the commit
+                        # as intellisense+Claude. Accumulated into missing_trailers so it
+                        # blocks in enforced (and warns in pilot) like other schema
+                        # violations.
+                        if ! printf '%s' "$msg" | grep -qiE '^Co-Authored-By:.*Claude'; then
+                            missing_trailers="$missing_trailers (claude_inline-missing-Co-Authored-By-Claude)"
+                        fi
+                        declared_tier="$inline_tier"
+                        ;;
+                    bot|github_ui|external_contributor|unknown)
+                        # Server-stamped exceptions need attribution_basis
+                        echo "$metadata_line" | jq -e 'has("attribution_basis")' >/dev/null 2>&1 \
+                            || missing_trailers="$missing_trailers attribution_basis"
+                        ;;
+                    *)
+                        # Any author_type outside the enum is drift.
+                        missing_trailers="$missing_trailers (unknown author_type: $author_type)"
+                        ;;
+                esac
+                # Set declared_tier for downstream log/error formatting (falls back to author_type for stubs without tier)
+                declared_tier="$(echo "$metadata_line" | jq -r '.tier // .author_type' 2>/dev/null)"
+            else
+                total_checked=$((total_checked + 1))
+                missing_trailers=" (unsupported Intellisense-Metadata schema version: v=${schema_v:-absent}; expected v=1)"
+                declared_tier="?"
+            fi
+        elif [ -n "$metadata_line" ]; then
+            # Trailer present but jq is missing: it cannot be checked here (CI re-checks).
+            continue
+        else
+            # No Intellisense-Metadata trailer: drift unless allowlisted (the
+            # allowlist check above returned 1 = not allowlisted).
+            total_checked=$((total_checked + 1))
+            missing_trailers=" (Intellisense-Metadata trailer absent — emit via prepare-commit-msg, or add to .intellisense/exception-allowlist.yaml with governance)"
+            declared_tier="?"
+        fi
+
+        if [ -n "$missing_trailers" ]; then
+            total_drift=$((total_drift + 1))
+            local now
+            now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "[$now] commit=$sha tier=$declared_tier missing=$missing_trailers gate=$gate_mode" \
+                >> "$drift_log" 2>/dev/null || true
+            if [ "$gate_mode" = "enforced" ]; then
+                echo "❌ BLOCKED (the metadata check enforced): commit $sha (Tier $declared_tier) missing:$missing_trailers" >&2
+                echo "   Fix: re-run setup.sh or amend the commit to include the missing fields." >&2
+                return 1
+            else
+                echo "⚠ [intellisense pilot] commit $sha (Tier $declared_tier) missing:$missing_trailers" >&2
+                echo "   Push proceeds. Logged to: $drift_log" >&2
+            fi
+        fi
+
+        # per-commit tier-mismatch check. Block unconditionally
+        # when declared metadata tier is LESS than the path-derived tier — the
+        # classifier under-classified this commit and the gate must not rely
+        # on its verdict. Independent of gate_mode (pilot or enforced).
+        # The path tier comes from the engine (_engine_tier_of_paths), the same
+        # model the gate and CI use.
+        local commit_files commit_path_tier
+        commit_files="$(git show --name-only --pretty= "$sha" 2>/dev/null)"
+        # A commit without metadata declares no tier ("?"): nothing to compare.
+        case "$declared_tier" in [0-9]) ;; *) commit_files="" ;; esac
+        if [ -n "$commit_files" ]; then
+            commit_path_tier="$(echo "$commit_files" | _engine_tier_of_paths)"
+            if [ "$declared_tier" -lt "$commit_path_tier" ]; then
+                echo "❌ BLOCKED: commit $sha — metadata declares tier=$declared_tier but changed paths imply tier=$commit_path_tier (mismatch)" >&2
+                echo "   The intellisense classifier under-classified this commit." >&2
+                echo "   Fix: run /intellisense reclassify (human-driven override) and amend the commit metadata." >&2
+                return 1
+            fi
+        fi
+    done < <(git rev-list "$range" 2>/dev/null)
+
+    if [ "$total_checked" -gt 0 ] && [ "$total_drift" -eq 0 ]; then
+        echo "✅ the metadata check trailer validation: $total_checked intellisense commit(s), no drift"
+    fi
+    return 0
+}
+
+# =============================================================================
+# TIER 0: Heuristic warning (allows push)
+# =============================================================================
+
+if [ "$TIER" -eq 0 ]; then
+    # Heuristic secret scanning on pushed diff content
+    PUSHED_DIFF=$(git diff "$RANGE_BASE...HEAD" 2>/dev/null)
+    if echo "$PUSHED_DIFF" | grep -iE '(api[_-]?key|password|token|secret|private[_-]?key)' &>/dev/null; then
+        echo ""
+        echo "⚠️  intellisense WARNING (Tier 0): Possible hardcoded secret detected"
+        echo "   Grep pattern matched in pushed diff. Manual review recommended."
+        echo ""
+        echo "   This is a heuristic check. False positives are common."
+        echo "   If this is a false positive, re-run with:"
+        echo "   git push  (will succeed despite warning)"
+        echo ""
+    fi
+    # tier-aware intellisense trailer validation (defined at end of file).
+    if ! intellisense_validate_new_trailer_set; then
+        exit 1
+    fi
+    exit 0
+fi
+
+# =============================================================================
+# LAYER 1 CONTRACT VALIDATION (additive — never replaces visible artifacts)
+#
+# Layer 1 rule (transitional, will tighten in Layer 2/3):
+#   - The branch's contract is .intellisense/contracts/<branch>.md (committed with the change). Its front
+#     matter is Live mode's machine-checked contract; the engine gate has already validated it as evidence.
+#   - A branch without that file does NOT block here (the gate decided whether a contract was needed).
+#   - The engine gate's task-trailer + Change Contract rules still block as before.
+#   - When the contract file IS present, it is validated against schema +
+#     Gate Rules R1–R5 + scope drift; failure blocks the push.
+#   - The contract file NEVER substitutes for the visible task trailer / Change Contract:
+#     trailers — those checks have already run by the time this is invoked.
+#
+# Validator exit code → hook behavior:
+#   0  → ✓ acknowledge and continue
+#   1  → ❌ schema invalid (missing field, branch mismatch) — BLOCK
+#   2  → ❌ policy invalid (R1–R5 / scope drift) — BLOCK
+#   3  → ⚠ internal error (jq missing, malformed JSON) — WARN + fall through
+#         (fall-through means: push proceeds on the strength of the visible
+#          artifacts that already passed earlier in this hook)
+#   *  → ⚠ unexpected exit — WARN + fall through (treat as exit 3)
+# =============================================================================
+
+_contract_safe_branch() {
+    # Encode branch name for filesystem use: replace '/' with '__' (double underscore).
+    # MUST stay in sync with scripts/preToolUse-contract-gate.sh and the path
+    # the /contract skill writes to. DO NOT replace with `tr '/' '_'` (single
+    # underscore) — silently breaks contract path lookup (c0f68cb).
+    # Parity test: tests/test_contract_gate.sh::test_branch_slug_parity asserts
+    # this function and the gate script produce byte-identical output.
+    local b="$1"
+    echo "${b//\//__}"
+}
+
+_contract_resolve_validator() {
+    # Search order: in-tree (developing this repo) → ~/.intellisense → ~/.claude-intellisense.
+    local repo_root
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+    local candidates=(
+        "${repo_root:+$repo_root/scripts/validate-contract-schema.sh}"
+        "$HOME/.intellisense/scripts/validate-contract-schema.sh"
+        "$HOME/.claude-intellisense/scripts/validate-contract-schema.sh"
+    )
+    for c in "${candidates[@]}"; do
+        [ -n "$c" ] && [ -f "$c" ] && { echo "$c"; return 0; }
+    done
+    return 1
+}
+
+validate_session_contract_if_present() {
+    local repo_root branch contract_file validator changed_csv rc
+    repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+    [ -n "$branch" ] || return 0
+
+    contract_file="$repo_root/.intellisense/contracts/$(_contract_safe_branch "$branch").md"
+    if [ ! -f "$contract_file" ]; then
+        return 0  # Layer 1: optional. No file = no extra check.
+    fi
+
+    if ! validator="$(_contract_resolve_validator)"; then
+        echo "⚠ contract present but validator script not found — falling through (Layer 1)"
+        return 0
+    fi
+
+    # CHANGED_FILES is NEWLINE-separated (git diff --name-only | sort -u);
+    # convert newlines only to CSV. The old
+    # `tr ' \n' ',,'` also converted spaces INSIDE filenames to commas, so a
+    # valid contract declaring "docs/foo bar.md" false-blocked as scope drift.
+    # Known limit: a comma inside a filename still breaks the CSV interface.
+    changed_csv="$(echo "$CHANGED_FILES" | tr '\n' ',' | sed 's/,*$//; s/^,*//')"
+
+    echo ""
+    echo "🔎 Layer 1: validating $contract_file"
+    # Pre-push runs the validator in --context=evidence so retroactive and
+    # evidence_only contracts (reviewer-audit artifacts) validate schema-clean
+    # without being rejected by R6. Edit-time R6
+    # still blocks them via PreToolUse (validator default --context=edit).
+    # --changed-files MUST be preserved so push-time scope-drift detection
+    # remains active.
+    bash "$validator" "$contract_file" --changed-files="$changed_csv" --context=evidence
+    rc=$?
+    case "$rc" in
+        0)
+            echo "✅ contract validated (Live-mode fields: state, scope, task binding)"
+            # Visible reviewer signal: if the
+            # contract state is reviewer-evidence, surface that loudly so the
+            # developer + reviewer cannot mistake it for pre-edit authorization.
+            contract_state="$("$INTELLISENSE_ENGINE" contract show "$contract_file" 2>/dev/null | jq -r '.state // ""' 2>/dev/null)"
+            if [ "$contract_state" = "retroactive" ] || [ "$contract_state" = "evidence_only" ]; then
+                cat >&2 <<'RETROEOF'
+
+⚠️  intellisense: retroactive/evidence_only contract is reviewer evidence ONLY; not proof of pre-edit approval.
+    Verify the work was authorized through other means: the task, a prior approved Change Contract, commit trailers.
+    Stronger PR-visible CI enforcement is out of scope for this hook.
+
+RETROEOF
+            fi
+            return 0
+            ;;
+        1|2)
+            echo ""
+            echo "❌ BLOCKED: contract validation failed (validator exit $rc)"
+            echo "   Visibility rule: this is in addition to the task trailer and Change Contract,"
+            echo "   not a replacement. Both must hold for Tier 1+ pushes."
+            return 1
+            ;;
+        3)
+            echo "⚠ contract validator internal error (exit 3) — falling through to visible artifacts"
+            return 0
+            ;;
+        *)
+            echo "⚠ contract validator returned unexpected exit $rc — treating as internal error, falling through"
+            return 0
+            ;;
+    esac
+}
+
+# =============================================================================
+# GRAPH STATUS (warn by default; code intelligence code-review-graph only): graph status for intellisense-managed supported Tier 1+ pushes
+#
+# Inline implementation (no library sourcing — pre-push hook is self-contained
+# and runs from .git/hooks/, not from INTELLISENSE_SETUP). The check
+# warns by default; it blocks only for a mandatory stack in block mode.
+# =============================================================================
+
+# Inline intellisense-managed marker check
+_graph_is_managed() {
+    local repo="$1"
+    [ -f "$repo/.intellisense/MANAGED" ] && return 0
+    [ -f "$repo/CLAUDE.md" ] && grep -qF '<!-- INTELLISENSE-MANAGED -->' "$repo/CLAUDE.md" 2>/dev/null
+}
+
+# Inline stack support classification (mirrors scripts/lib/intellisense-graph.sh).
+# No stack is mandatory-supported by default — code-review-graph is a
+# single-maintainer third-party tool; see
+# docs/CODE-REVIEW-GRAPH-INTEGRATION.md § Third-party dependency. An
+# organization opts a stack in via INTELLISENSE_GRAPH_MANDATORY_STACKS or
+# intellisense.graph_mandatory_stacks in ~/.claude/settings.json (same two sources,
+# same precedence, as scripts/lib/intellisense-graph.sh — keep both in sync).
+_graph_stack_support() {
+    local stack="$1" stack_lc mandatory_list settings_file
+    stack_lc="$(echo "$stack" | tr '[:upper:]' '[:lower:]')"
+    if [ -n "${INTELLISENSE_GRAPH_MANDATORY_STACKS:-}" ]; then
+        mandatory_list=" $(echo "$INTELLISENSE_GRAPH_MANDATORY_STACKS" | tr '[:upper:]' '[:lower:]' | tr ',' ' ') "
+        case "$mandatory_list" in
+            *" $stack_lc "*) echo "mandatory-supported"; return 0 ;;
+        esac
+    fi
+    settings_file="${INTELLISENSE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    if [ -f "$settings_file" ] && command -v jq >/dev/null 2>&1; then
+        if jq -e --arg s "$stack_lc" \
+            '(.intellisense.graph_mandatory_stacks // []) | map(ascii_downcase) | index($s) != null' \
+            "$settings_file" >/dev/null 2>&1; then
+            echo "mandatory-supported"
+            return 0
+        fi
+    fi
+    case "$stack" in
+        go|python|typescript|javascript|node|nestjs|react|java|csharp|kotlin|rust) echo "candidate-supported" ;;
+        php|laravel|angular) echo "weak" ;;
+        vue) echo "unsupported" ;;
+        flutter) echo "weak" ;;
+        *) echo "case-by-case" ;;
+    esac
+}
+
+# Read the configured stack from .intellisense/manifest.json (set by setup-repos.sh)
+_graph_read_stack() {
+    local manifest="$1/.intellisense/manifest.json"
+    [ -f "$manifest" ] || { echo ""; return 1; }
+    if command -v jq &>/dev/null; then
+        jq -r '.stack // empty' "$manifest" 2>/dev/null
+    else
+        # Fallback: line-grep for "stack": "value"
+        grep -oE '"stack"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" 2>/dev/null \
+            | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+    fi
+}
+
+# Read a top-level field from .intellisense/graph-status.json
+_graph_read_status_field() {
+    local repo="$1" field="$2"
+    local status="$repo/.intellisense/graph-status.json"
+    [ -f "$status" ] || return 1
+    if command -v jq &>/dev/null; then
+        jq -r --arg f "$field" '.[$f] // empty' "$status" 2>/dev/null
+    else
+        grep -oE "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$status" 2>/dev/null \
+            | head -1 | sed -E "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/"
+    fi
+}
+
+# _graph_enforce_mode — read enforcement mode from ~/.claude/settings.json.
+# Returns "warn" (default) or "block".
+#
+# Env-var emergency override (INTELLISENSE_GRAPH_ENFORCE_OVERRIDE) is kept for genuine
+# incident response but is NEVER advertised in error messages (printed
+# bypass commands are easy to copy and defeat the audit purpose). When used, this function:
+#   - logs to ~/.claude-intellisense/graph-overrides.jsonl with timestamp + user + repo
+#   - emits a visible stderr notice
+# The intended exception path for non-emergency cases is the committed
+# `.intellisense/graph-exception.json` file (already supported above; visible in PR).
+_graph_enforce_mode() {
+    if [ -n "${INTELLISENSE_GRAPH_ENFORCE_OVERRIDE:-}" ]; then
+        local audit_dir="$HOME/.claude-intellisense"
+        local audit_log="$audit_dir/graph-overrides.jsonl"
+        mkdir -p "$audit_dir" 2>/dev/null
+        if command -v jq >/dev/null 2>&1; then
+            local repo_root
+            repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)"
+            jq -nc \
+                --arg ts "$(date -u +%FT%TZ)" \
+                --arg val "$INTELLISENSE_GRAPH_ENFORCE_OVERRIDE" \
+                --arg user "${USER:-unknown}" \
+                --arg repo "$repo_root" \
+                '{ts: $ts, event: "graph_enforce_override_used", value: $val, user: $user, repo: $repo}' \
+                >>"$audit_log" 2>/dev/null || true
+        fi
+        echo "intellisense NOTICE: graph enforcement overridden via env var (=$INTELLISENSE_GRAPH_ENFORCE_OVERRIDE). Audit log: $audit_log" >&2
+        echo "$INTELLISENSE_GRAPH_ENFORCE_OVERRIDE"
+        return 0
+    fi
+    local settings="${INTELLISENSE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    if [ -f "$settings" ] && command -v jq &>/dev/null; then
+        local mode
+        mode="$(jq -r '.intellisense.graph_enforcement // empty' "$settings" 2>/dev/null)"
+        if [ "$mode" = "block" ] || [ "$mode" = "warn" ]; then
+            echo "$mode"
+            return 0
+        fi
+    fi
+    echo "warn"
+}
+
+# graph_warn_if_needed — emit graph-status messages for intellisense-managed supported
+# Tier 1+ pushes. Returns 0 (allow) or 1 (block).
+#
+# Mode semantics (controlled by intellisense.graph_enforcement in ~/.claude/settings.json):
+#   warn  (default) — emit warning, return 0 (push proceeds)
+#   block            — for mandatory-supported stacks (Go, Python) with missing
+#                      graph: emit block message, return 1 (push aborts)
+#                      For candidate-supported / weak stacks: stay in warn mode
+#                      (per existing stack-classification rules)
+# _code_intel_choice — the code intelligence this machine chose at install (`--code-intel`):
+# INTELLISENSE_CODE_INTEL, else ~/.intellisense/integrations.env, else none.
+_code_intel_choice() {
+    if [ -n "${INTELLISENSE_CODE_INTEL:-}" ]; then
+        echo "$INTELLISENSE_CODE_INTEL"
+    elif [ -f "$HOME/.intellisense/integrations.env" ]; then
+        sed -n 's/^INTELLISENSE_CODE_INTEL=//p' "$HOME/.intellisense/integrations.env" | head -1
+    else
+        echo none
+    fi
+}
+
+graph_warn_if_needed() {
+    local repo
+    # The graph is optional: nothing to report unless the team chose it.
+    [ "$(_code_intel_choice)" = "code-review-graph" ] || return 0
+    repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+
+    # Not intellisense-managed → no warning
+    _graph_is_managed "$repo" || return 0
+
+    # Exception present → no warning (repo opted out of graph use)
+    [ -f "$repo/.intellisense/graph-exception.json" ] && return 0
+
+    # Read configured stack
+    local stack
+    stack="$(_graph_read_stack "$repo")"
+    [ -z "$stack" ] && return 0  # no manifest stack — silent
+
+    # Classify; only warn for mandatory/candidate/weak (which all benefit from graph)
+    local support
+    support="$(_graph_stack_support "$stack")"
+    case "$support" in
+        mandatory-supported|candidate-supported|weak) ;;
+        *) return 0 ;;  # unsupported / case-by-case → silent
+    esac
+
+    local status_file="$repo/.intellisense/graph-status.json"
+    local bootstrap_cmd="bash scripts/graph-bootstrap.sh --repo \"\$PWD\" --stack $stack"
+    local enforce_mode
+    enforce_mode="$(_graph_enforce_mode)"
+
+    # validate graph READINESS, not just file
+    # existence. A status file with readiness=failed/skipped/missing must
+    # NOT pass as "graph exists." Treat such a file the same as missing.
+    local readiness="missing"
+    if [ -f "$status_file" ]; then
+        if command -v jq &>/dev/null; then
+            readiness="$(jq -r '.readiness // "unknown"' "$status_file" 2>/dev/null)"
+            # Malformed JSON or missing readiness key — treat as missing
+            [ -z "$readiness" ] || [ "$readiness" = "null" ] && readiness="malformed"
+        else
+            # No jq — cannot read the status; file exists, assume ready
+            readiness="ready"
+        fi
+    fi
+
+    if [ "$readiness" != "ready" ]; then
+        # Either missing file OR file exists but readiness != "ready"
+        local state_desc
+        case "$readiness" in
+            missing)    state_desc="no graph (.intellisense/graph-status.json missing)" ;;
+            failed)     state_desc=".intellisense/graph-status.json reports readiness=failed" ;;
+            skipped)    state_desc=".intellisense/graph-status.json reports readiness=skipped" ;;
+            unknown|"") state_desc=".intellisense/graph-status.json has no readiness field (treating as not ready)" ;;
+            malformed)  state_desc=".intellisense/graph-status.json is malformed JSON" ;;
+            *)          state_desc=".intellisense/graph-status.json reports readiness=$readiness (not 'ready')" ;;
+        esac
+        # Block only for mandatory-supported + block mode.
+        if [ "$enforce_mode" = "block" ] && [ "$support" = "mandatory-supported" ]; then
+            cat <<EOF >&2
+
+❌ BLOCKED: intellisense graph not ready for Tier 1+ pushes in this repo.
+   Stack: $stack ($support)
+   Current state: $state_desc
+   Enforcement mode: block (intellisense.graph_enforcement in ~/.claude/settings.json)
+   To bootstrap: $bootstrap_cmd
+
+   Audited exception path: commit \`.intellisense/graph-exception.json\` with
+   { "owner": "<name>", "reason": "<rationale>", "expiry": "<YYYY-MM-DD>" }
+   The exception is then visible in the PR and reviewable. Do NOT use
+   undocumented env-var bypasses — those defeat the audit purpose.
+
+EOF
+            return 1
+        fi
+        cat <<EOF
+
+⚠️  intellisense graph not ready for Tier 1+ workflows in this repo (mode=$enforce_mode).
+   Stack: $stack ($support)
+   Current state: $state_desc
+   $([ "$enforce_mode" = "warn" ] && echo "After the team flips intellisense.graph_enforcement=block, mandatory-supported stacks will be blocked.")
+   To bootstrap: $bootstrap_cmd
+
+EOF
+        return 0
+    fi
+
+    # Staleness check: built_at_utc vs HEAD commit time
+    local built_at built_epoch head_epoch
+    built_at="$(_graph_read_status_field "$repo" built_at_utc)"
+    if [ -n "$built_at" ] && command -v python3 &>/dev/null; then
+        built_epoch="$(python3 -c 'import sys, datetime; print(int(datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()))' "$built_at" 2>/dev/null || echo 0)"
+        head_epoch="$(git -C "$repo" log -1 --format=%ct HEAD 2>/dev/null || echo 0)"
+        if [ "$built_epoch" -gt 0 ] && [ "$head_epoch" -gt 0 ] && [ "$built_epoch" -lt "$head_epoch" ]; then
+            # Stale graph in block mode + mandatory-supported = warn (not block).
+            # Rationale: stale-but-present is better than missing; team can refresh
+            # without losing a push. A stricter policy could promote stale
+            # → block when stale-by-N-days exceeds a threshold.
+            cat <<EOF
+
+⚠️  intellisense graph is stale (mode=$enforce_mode).
+   Stack: $stack ($support)
+   built_at_utc: $built_at predates HEAD commit.
+   To refresh: $bootstrap_cmd
+
+EOF
+        fi
+    fi
+
+    return 0
+}
+
+# =============================================================================
+# TIER 1+: the evidence the tier needs, checked by the engine's gate
+#
+# `intellisense gate` applies the repository's policy: a task trailer on every commit whose own changes are
+# at a tier that needs one (accepted keys: evidence.task_trailers — not only Beads:), a valid change
+# contract, a changed test where a tier asks for one, and the secret scan. Approval is enforced at merge
+# by branch protection, not here.
+# =============================================================================
+
+if [ "$TIER" -ge 1 ]; then
+    echo ""
+    echo "🔍 intellisense: Tier $TIER — $TIER_NAME"
+    if [ "${#TIER_TRIGGERS[@]}" -gt 0 ]; then
+        echo "   Because of:"
+        for trigger in "${TIER_TRIGGERS[@]}"; do
+            t_file="${trigger%%|*}"
+            t_rest="${trigger#*|}"
+            echo "     • $t_file  (${t_rest%%|*})"
+        done
+    fi
+    echo ""
+
+    # Metadata trailers first: a classifier under-classification is the more actionable message.
+    if ! intellisense_validate_new_trailer_set; then
+        exit 1
+    fi
+    if ! "$INTELLISENSE_ENGINE" gate --base "$RANGE_BASE" --head HEAD; then
+        exit 1
+    fi
+    echo "✅ Tier $TIER checks passed (the evidence this tier needs is present)"
+    if ! validate_session_contract_if_present; then
+        exit 1
+    fi
+    if ! graph_warn_if_needed; then
+        exit 1
+    fi
+    echo ""
+    exit 0
+fi
+
+if ! intellisense_validate_new_trailer_set; then
+    exit 1
+fi
+exit 0

@@ -1,0 +1,27 @@
+
+# intellisense discovery report — advisory only, not source of truth
+.intellisense/existing-knowledge-report.md
+
+# Beads / Dolt files (added by bd init)
+# .beads/ is per-laptop — bd is used as a personal task tracker producing
+# `Beads: <id>` artifacts for the pre-push gate; issues are NOT shared via git.
+.dolt/
+*.db
+.beads-credential-key
+.beads/
+.claude/settings.json
+.claude/scheduled_tasks.lock
+AGENTS.md
+.docs/
+
+# Layer-1 contract artifacts — per-developer validator state, never committed
+.intellisense/session/
+
+# Stray test logs — root-cause fix is using "$TMP/err_*.log" in tests, this
+# is a defense-in-depth backstop so any future test that mistakenly writes
+# to the repo root doesn't dirty git status.
+err_*.log
+*.log
+
+# macOS folder metadata (can contain file names from the machine)
+.DS_Store

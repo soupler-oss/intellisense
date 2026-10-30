@@ -1,0 +1,6 @@
+{
+  "intellisense_setup_path": "{{INTELLISENSE_SETUP_PATH}}",
+  "installed_by": "{{INSTALLED_BY}}",
+  "installed_date": "{{INSTALLED_DATE}}",
+  "intellisense_version": "{{INTELLISENSE_VERSION}}"
+}

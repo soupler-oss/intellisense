@@ -1,0 +1,184 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## App Identity
+
+- **App**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this app does and for whom]
+- **Stack**: Flutter {{STACK_VERSION}} (Dart {{DART_VERSION}}, null-safety required)
+- **Target Platforms**: [iOS | Android | Web | Desktop — list what is shipped]
+- **State Management**: [Riverpod | flutter_bloc | Provider | GetX | setState-only | other]
+- **Team**: [Owner team]
+- **Backend**: [API service name(s) consumed]
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/flutter-patterns.md` — Naming, widgets, async state, P3/P4 testing
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+- `@knowledge-base/00-system-context.md` — Stack, key dependencies, app metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| App architecture, widget tree, state shape | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions, pubspec entries | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| API consumed (endpoints, schemas, auth) | `knowledge-base/02-api-contracts.md` |
+| State shape (providers, blocs, repositories) | `knowledge-base/02-data-models.md` |
+| Business rules, access control on the client | `knowledge-base/03-biz-domain-rules.md` |
+| Critical user journeys (login, checkout, tracking, etc.) | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious bugs, platform quirks, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, code review checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy (widget tests, integration_test, golden) | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## App Architecture
+
+[3–5 sentences describing the app design. Examples:]
+
+```
+Flutter 3.x mobile app (iOS + Android) consuming the orders/users/notifications REST API.
+State managed via Riverpod (AsyncNotifier for server state, StateNotifier for UI state).
+Navigation via go_router. Auth tokens stored in flutter_secure_storage; HTTP via dio with
+an auth interceptor. Optimistic updates on favorite/cart actions with explicit rollback on failure.
+```
+
+[Or for BLoC:]
+
+```
+Flutter 3.x app using flutter_bloc. Each feature owns a Bloc with sealed-class events and states.
+Navigation via go_router; deep-linking handled by the same router config.
+HTTP via dio + retrofit-generated clients. Repositories sit between blocs and data sources.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: lib/services/api_client.dart] | [XX KB] | [Reason: e.g., dio instance + interceptors used by every request] |
+| [TODO: lib/features/auth/auth_repository.dart] | [XX KB] | [Reason: e.g., auth state shared across the app] |
+| [TODO: lib/main.dart] | [XX KB] | [Reason: app entry, providers/blocs registration] |
+| `ios/Runner/Info.plist` | varies | Privacy keys, capabilities, URL schemes — App Store reviews this |
+| `ios/Runner/AppDelegate.swift` | varies | Plugin registration + lifecycle; mistakes = launch crash |
+| `ios/Podfile` | varies | Native dependency graph; affects every iOS build |
+| `android/app/src/main/AndroidManifest.xml` | varies | Permissions, intent filters, deep-link config |
+| `android/app/build.gradle` | varies | minSdk/targetSdk, signing, ProGuard — affects every Android build |
+| `android/app/src/main/kotlin/.../MainActivity.kt` | varies | Platform-channel handlers; lifecycle hooks |
+| `android/build.gradle` | varies | AGP/Kotlin/Gradle versions; bumps must move together |
+
+## Structural Map
+
+Key files Claude reads first:
+- `lib/main.dart` — entry point, root mount, top-level providers/blocs
+- `lib/app.dart` — `MaterialApp.router` / `MaterialApp` configuration
+- `lib/features/<feature>/` — feature-first layout (data / domain / presentation)
+- `lib/shared/` or `lib/widgets/` — cross-feature widgets, design system primitives
+- `lib/services/` — typed API clients (dio/retrofit wrappers)
+- `lib/models/` — DTOs, entities, freezed/json_serializable types
+- `lib/router/` — go_router or auto_route configuration
+- `test/` — unit + widget tests mirroring `lib/` layout
+- `integration_test/` — end-to-end flows
+- `pubspec.yaml` — package dependencies, asset declarations, flavor configs
+
+Native shells (touched less often, escalate risk when touched):
+- `ios/Runner/` — Swift / Obj-C source, Info.plist, entitlements
+- `ios/Podfile` + `Podfile.lock` — CocoaPods dependency graph
+- `ios/RunnerTests/` — Swift unit tests (XCTest)
+- `android/app/src/main/kotlin/` — Kotlin source (Activity, MethodChannel handlers)
+- `android/app/src/main/AndroidManifest.xml` — permissions, intents, deep links
+- `android/app/build.gradle` + `android/build.gradle` — Gradle config
+- `android/app/src/test/` — Kotlin unit tests (JUnit)
+
+Guidance for native edits lives in `flutter-patterns.md §Native Platform Folders`.
+
+Layers and their purpose:
+- **Widgets** → presentation; props-only when possible; `const` constructors where allowed
+- **Providers / Blocs / Notifiers** → state-management surface (matches the chosen lib)
+- **Repositories** → orchestrate data sources; return domain types, not raw HTTP responses
+- **Services** → typed wrappers around dio/http; never bare HTTP calls in widgets
+- **Models** → immutable data classes (freezed preferred); JSON via json_serializable
+- **Tests** → `*_test.dart` colocated under `test/`; widget tests for UI; integration tests for flows
+
+## Upstream Dependencies
+
+[List backend services this app calls. Example:]
+- `orders-api` — REST: `/api/orders`, `/api/orders/:id`
+- `auth-service` — JWT issuance, refresh
+- `tracking-api` — WebSocket / SSE for live tracking
+
+## Domain Terms
+
+[App-specific glossary. Example:]
+- **Optimistic Update** — UI state changes before API confirms; rollback on failure required
+- **Order Number** — customer-facing identifier; primary lookup key for an order
+- **Fulfilment Batch** — group of orders packed and dispatched together
+
+## Run / Test / Build
+
+```bash
+# Install
+flutter pub get
+
+# Generate code (freezed, json_serializable, retrofit, etc.)
+dart run build_runner build --delete-conflicting-outputs
+
+# Run (debug)
+flutter run                          # default device
+flutter run --flavor dev             # flavored builds
+flutter run -d chrome                # web
+
+# Test
+flutter test                         # unit + widget tests
+flutter test --reporter compact      # compact CI output
+flutter test integration_test/       # integration tests (requires device/emulator)
+
+# Lint / format
+dart format --set-exit-if-changed .
+dart analyze --fatal-infos
+
+# Build (release)
+flutter build apk --release          # Android APK
+flutter build appbundle --release    # Android AAB (Play Store)
+flutter build ios --release          # iOS (requires macOS + Xcode)
+flutter build web --release          # Web
+```
+
+## Known Gotchas
+
+[App-specific quirks. Examples:]
+- **`mounted` after `await`**: in any `State`, check `mounted` before `setState` or using `context`
+- **`BuildContext` across async gaps**: triggers `use_build_context_synchronously` — fix, don't suppress
+- **Generated files**: never hand-edit `*.g.dart` or `*.freezed.dart`; re-run build_runner
+- **iOS-only Pod issues**: `cd ios && pod install --repo-update` after dependency bumps
+- **Optimistic update without rollback**: see `flutter-patterns.md §Isolated Real-Persistence Tests (P3 / P4)`. Compensating action required on API failure
+- **Native edits (`ios/`, `android/`)**: see `flutter-patterns.md §Native Platform Folders`. Permission added to Dart without matching `<uses-permission>` / `NS*UsageDescription`, or `MethodChannel` name mismatch between Dart and native — silent at compile time, fails at runtime
+- **AGP / Kotlin / Gradle bumps**: must move together; partial bumps are the most common CI build break

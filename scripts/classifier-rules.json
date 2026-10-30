@@ -1,0 +1,150 @@
+{
+  "$comment": "Classifier rules for userPromptSubmit-classifier.sh. Tier and mode signals are case-insensitive regex alternation patterns matched against the user's prompt. Escalation rules fire after initial classification to bump tier/mode based on cross-axis combinations (e.g., L48: financial+bug_fix -> full_feature).",
+
+  "tier_signals": {
+    "_comment_tier_2_unconditional": "Strong tier_2 keywords — these are unambiguously financial/security/migration regardless of context. Noisy generic terms (session, checkout, points, login, cart) moved to tier_2_contextual_keywords below — they require co-occurrence with a stronger term to escalate to Tier 2.",
+    "tier_2_keywords": [
+      "payment", "balance", "payout", "invoice", "tax",
+      "deduct", "deduction", "debit", "credit balance", "stored credit",
+      "refund", "chargeback", "cashback",
+      "billing",
+      "authentication", "authorization", "password", "secret", "credential",
+      "jwt", "bearer",
+      "migration", "schema change", "alter table", "drop column", "drop table",
+      "pii", "personal info", "ssn", "national id"
+    ],
+    "_comment_tier_2_contextual": "Ambiguous terms that escalate to Tier 2 only when co-occurring with a stronger signal. E.g. 'session token' or 'session expiry' → Tier 2; 'session log review' → Tier 0. 'checkout flow API' → Tier 2; 'checkout button CSS' → Tier 0.",
+    "tier_2_contextual_keywords": [
+      "session", "checkout", "points", "login", "cart", "auth", "cookie", "token"
+    ],
+    "_comment_contextual_strong_neighbors": "If any of these strong neighbors appear in the prompt alongside a contextual keyword, escalate to Tier 2. Otherwise the contextual keyword alone does NOT escalate. IMPORTANT: this list MUST NOT overlap with tier_2_contextual_keywords above — overlap causes single-word self-triggering (e.g., bare 'auth' or 'token' would match both sides of the AND). Removed: auth, cookie, token (kept only as contextual).",
+    "tier_2_contextual_strong_neighbors": [
+      "expiry", "secret", "validate", "validation", "verify",
+      "payment", "balance", "payout", "deduct", "refund", "chargeback",
+      "endpoint", "api", "flow", "logic", "service", "handler",
+      "secure", "security", "vulnerability", "exploit",
+      "migration", "schema", "database", "sql",
+      "oauth", "saml", "csrf", "xss"
+    ],
+    "tier_1_keywords": [
+      "setup", "infrastructure", "infra", "hook", "rule", "skill", "agent", "template",
+      "cross-repo", "cross repo", "across services", "rollout",
+      "config", "settings", "env var",
+      "ci/cd", "github action", "workflow file"
+    ],
+    "tier_0_negative_keywords": [
+      "typo", "comment", "docstring", "rename variable", "format", "lint",
+      "readme", "changelog"
+    ]
+  },
+
+  "mode_signals": {
+    "hotfix": [
+      "production[[:space:]]+(is[[:space:]]+)?down",
+      "site[[:space:]]+(is[[:space:]]+)?down",
+      "p0",
+      "incident",
+      "critical[[:space:]]+outage",
+      "outage",
+      "users[[:space:]]+(can'?t|cannot)"
+    ],
+    "bug_fix": [
+      "fix", "broken", "wrong", "crash", "error", "exception", "not working",
+      "bug", "issue", "defect", "failing"
+    ],
+    "refactor": [
+      "refactor", "extract", "rename", "reorganize", "split into",
+      "clean up", "deduplicate"
+    ],
+    "full_feature": [
+      "build", "add", "implement", "create", "introduce", "new feature",
+      "new endpoint", "new service"
+    ],
+    "design_review_only": [
+      "explain", "how does", "what does", "design only", "understand",
+      "what would", "review the design",
+      "audit", "analyze", "analyse", "assess", "evaluate", "investigate",
+      "walk me through"
+    ],
+    "pr_review": [
+      "review pr", "review pull request", "review the pr", "code review"
+    ],
+    "qa": [
+      "run tests", "test coverage", "qa pass", "test the"
+    ]
+  },
+
+  "escalations": {
+    "L48_financial_bugfix_to_fullfeature": {
+      "comment": "development-workflow.md:48 — financial impact on bug_fix escalates to full_feature for full planning cycle",
+      "if": { "mode": "bug_fix", "tier": "2", "has_keyword_class": "financial" },
+      "then": { "mode": "full_feature" }
+    },
+    "tier_2_security_keeps_full_feature_if_implementing": {
+      "comment": "Security + build/implement keywords -> ensure full_feature (not bug_fix)",
+      "if": { "tier": "2", "mode_in": ["bug_fix"], "has_keyword_class": "security" },
+      "then": { "mode": "full_feature" }
+    },
+    "scope_implies_full_feature": {
+      "comment": "If prompt mentions multiple services/repos, escalate from bug_fix to full_feature regardless of keywords",
+      "if": { "matches_regex": "(across|all|every|each)[[:space:]]+(service|repo|microservice)" },
+      "then": { "mode": "full_feature" }
+    }
+  },
+
+  "_comment_keyword_classes": "Used by L48 escalation rule (financial+bug_fix → full_feature). Contains BOTH unconditional and contextual terms — escalation logic checks for any match.",
+  "keyword_classes": {
+    "financial": [
+      "payment", "balance", "payout", "invoice", "tax",
+      "deduct", "deduction", "debit", "credit balance", "stored credit",
+      "refund", "chargeback", "cashback", "billing"
+    ],
+    "security": [
+      "authentication", "authorization", "password", "secret", "credential", "pii",
+      "jwt", "bearer"
+    ]
+  },
+
+  "context_shift_signals": [
+    "actually let's",
+    "actually let me",
+    "switching to",
+    "different task",
+    "new task",
+    "now i want to",
+    "now let's",
+    "scratch that",
+    "ignore the previous",
+    "start over"
+  ],
+
+  "_comment_approval_prompts": "PURE approval / continuation utterances ONLY. When the prompt (lowercased, trimmed of whitespace + trailing punctuation) is EXACTLY one of these phrases, the classifier preserves the active task identity (no new classification_id) and signals the PreToolUse path to advance contract state draft|presented -> approved. Bug fix: 'proceed' used to be treated as a new task, invalidating R7 task binding immediately after approval. Stay conservative — only EXACT-match approval phrases qualify; anything carrying additional scope ('yes, also handle errors') triggers re-classification.\n\nIMPORTANT — bare action verbs DO NOT belong here. 'implement' / 'implement it' / 'implement this' / 'do this' / 'do that' were removed because 'Review this PR' followed by 'implement' would silently preserve a Tier 0 design_review_only classification and let an enforced Edit slip through. Action verbs carry a task transition (review → build), not approval. If you find yourself adding an action verb here, you almost certainly want it in mode_signals.full_feature / bug_fix instead.\n\nCompounds with an explicit approval marker ('yes do it', 'ok proceed') stay — the 'yes'/'ok' prefix is the approval, the trailing verb is just emphasis.",
+  "approval_prompts": [
+    "yes", "y", "ok", "okay", "sure",
+    "approve", "approved", "approval", "confirm", "confirmed",
+    "proceed", "proceed.", "please proceed",
+    "go", "go ahead", "go for it",
+    "continue", "carry on",
+    "do it",
+    "let's go", "lets go", "let's do it", "lets do it",
+    "make it so", "ship it",
+    "sounds good", "looks good", "looks fine", "lgtm",
+    "yes please", "yes proceed", "yes do it", "yes go ahead",
+    "ok proceed", "ok go ahead", "ok do it"
+  ],
+
+  "load_files_by_classification": {
+    "comment": "Maps tier+mode to distilled rule fragment files under scripts/classifier-rule-content/. The classifier reads the file content and injects it via additionalContext.",
+    "tier_0": ["tier0.md"],
+    "tier_1_bug_fix": ["tier1-bug_fix.md"],
+    "tier_1_full_feature": ["tier1-full_feature.md"],
+    "tier_1_refactor": ["tier1-refactor.md"],
+    "tier_1_hotfix": ["tier1-bug_fix.md"],
+    "tier_2_default": ["tier2.md"],
+    "tier_2_bug_fix": ["tier2.md"],
+    "tier_2_full_feature": ["tier2.md"],
+    "tier_2_design_review_only": ["read-only.md"],
+    "tier_2_pr_review": ["read-only.md"],
+    "tier_2_qa": ["read-only.md"]
+  }
+}

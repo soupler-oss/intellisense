@@ -1,0 +1,139 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: Rust {{STACK_VERSION}} with [Axum|Actix Web|Tokio service]
+- **ORM**: [sqlx|Diesel|SeaORM|none]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/rust-patterns.md` — Naming, error handling (thiserror/anyhow), ownership, async, money arithmetic
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+Axum HTTP service handling order processing for the billing domain.
+Reads user profiles from auth-service; publishes payout events to Kafka.
+All database access via sqlx with explicit transactions for multi-row writes.
+Amounts are i64 minor units; checked arithmetic on every money operation.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: src/payments/mod.rs] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/auth/middleware.rs] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `src/main.rs` — entry point, router and state wiring
+- `src/routes/` — HTTP handlers; thin, delegate to services
+- `src/services/` — business logic and orchestration
+- `src/db/` or `src/repositories/` — all database access ([sqlx|Diesel])
+- `src/error.rs` — the crate's error type (thiserror) and its HTTP mapping
+- `tests/` — integration tests against a real database
+
+Layers and their purpose:
+- `routes/` → Parse and validate the request, call a service, map errors to responses
+- `services/` → Business logic; no SQL here
+- `db/` → All database access; one concern per module
+- `tests/` → Real-persistence-path tests for P1/P2 (see `rust-patterns.md`)
+
+## Upstream Dependencies
+
+[List services/repos this depends on. Example:]
+- `auth-service` — user identity, role lookup
+- `notification-service` — outbound email/SMS
+
+## Downstream Consumers
+
+[List services/repos that depend on this. Example:]
+- `web-frontend` — REST API consumer
+- `mobile-app` — REST API consumer
+- `analytics-pipeline` — reads outbound Kafka topic
+
+## Domain Terms
+
+[Service-specific glossary. Example:]
+- **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
+- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+
+## Run / Test / Build
+
+```bash
+# Build
+cargo build --locked
+
+# Test
+cargo test --locked
+
+# Lint
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+
+# Run
+cargo run
+```
+
+## Known Gotchas
+
+[Service-specific quirks. Examples:]
+- **`unwrap()` on I/O**: a panic in a request handler aborts that task; return a typed error instead. See `rust-patterns.md §Errors`.
+- **Money overflow**: release builds wrap on overflow; use `checked_add`/`checked_sub` on amounts.
+- **Mutex across `.await`**: a `std::sync::Mutex` guard held across an await point deadlocks under load.

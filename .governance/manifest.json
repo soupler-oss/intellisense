@@ -1,0 +1,76 @@
+{
+  "template": "repo-governance",
+  "templateVersion": "1.2.2",
+  "syncedAt": "2026-10-30T06:13:15.718Z",
+  "repo": "intellisense",
+  "profile": "package",
+  "config": {
+    "version": 1,
+    "org": {
+      "name": "Soupler",
+      "github": "soupler-oss",
+      "owner": "Soupler",
+      "copyright": "Soupler",
+      "license": "Apache-2.0",
+      "visibility": "private",
+      "defaultBranch": "develop",
+      "codeowners": "@soupler-labs",
+      "bypass": "organization-admin",
+      "requiredReviews": 1,
+      "slug": "soupler",
+      "regulated": false,
+      "standardsRepo": "intellisense"
+    },
+    "rules": {
+      "noAiAttribution": true,
+      "releasePrTitle": "release",
+      "requireDocsUpdate": true
+    },
+    "commands": {
+      "install": "true",
+      "lint": "bash scripts/ci/lint.sh",
+      "typeCheck": "go vet ./...",
+      "test": "bash scripts/ci/test.sh"
+    },
+    "stack": {
+      "packageManager": "pnpm",
+      "node": "22.15.0",
+      "pnpm": "9.15.9",
+      "isPnpm": true
+    },
+    "features": {
+      "docsSite": false
+    },
+    "layerFolders": {},
+    "repos": [
+      {
+        "description": "Agent-neutral AI coding governance: risk tiers, evidence gates, CI checks and rules for Claude Code, Codex, Copilot and Cursor.",
+        "owns": [],
+        "follows": [],
+        "name": "intellisense",
+        "profile": "package"
+      }
+    ]
+  },
+  "files": {
+    ".claude/commands/classify-change.md": "db3a7bdfb1154f82b6c0a9ca5f06fd5eabb46777e83310fdc61e727bfd5ff154",
+    ".claude/commands/governance-check.md": "1024f834eb8e809874e8e69b8a027f87d4aa9cdabad6cd8a564586f4d299f82b",
+    ".claude/commands/new-doc.md": "84c6cda137b163e5773905e1475fdb2d8fc90ac50fbe85bef55ba9b0550c6177",
+    ".claude/skills/doc-governance/SKILL.md": "fd442e1476154b8c3cc612e3335ba8fff858ee5a2446a9473d1a9d47bf72d927",
+    ".githooks/commit-msg": "e6f12ca2d8aac1a1b4fe0544f93e3eed95090441b91a4267f0891ace60f76691",
+    ".githooks/pre-commit": "49904188745c5f681e58c78f1ca3f166d4cf6aabc6ff399db04494d468c65a02",
+    ".github/PROTECTION_GUIDE.md": "d75631352d6f496288910bf6e9aea3e91fefb573cb7ad597c5a9dd5751d9421a",
+    ".github/governance/rulesets/main-develop-protection.json": "710bc26f3e4c33ae1f90184fc9747a83ddbc3242153dbab704903fe82cf54477",
+    ".github/governance/rulesets/main-develop-undeletable.json": "91b754507e383544057dd462fa3bac61c56fbf6fdf91a515d2da4f8cc2ffab0e",
+    ".github/governance/rulesets/main-protection.json": "ae3d91d91a92ed3cfcf4e4fce1bae495998df551107212faa2f9440a25a49a81",
+    ".github/workflows/branch-policy.yml": "af9db77c88a6f649a148a3ee1f60dbd1b54707b06fe8af14f5e1bd9d03ec6e33",
+    ".github/workflows/post-merge-issue-closure.yml": "65964e8e5671037dc32083410c581c9fc103ba3930c6a443f86ecc975f910245",
+    ".github/workflows/pr-governance.yml": "8abf83b961773283d41f9990bc44065bd26f63f036043e5bc073af35edbcb727",
+    ".github/workflows/secret-scan.yml": "bec3b69a989bf6c1a14a816f416d4c09490b8a6fb6591b33be1bc23cb1b295c3",
+    "bin/governance-brief.sh": "acdec5a1d7465f03199ff942744715a2d4ca291375e21fcfadac5bca3b8fcaa8",
+    "bin/install-hooks.sh": "a7fb7b159bb41ef159bacb77e26e0d2fae3fb5f7d2d1ee3ff6b33f8635915f3e",
+    "bin/run-gitleaks.sh": "184f2f2005bed55d665f708ad45bf69fbdf0d1ea3c268c7211194cbef34deea0",
+    "bin/statutory-integrity.mjs": "d46e3f224b84d12556c02cf3f26aaf6cc8dc93940ccccb396a893d6a502f8066",
+    "bin/statutory-integrity.sh": "5dd33b366d76b45098d4d33d50489f353d858d36924a6c6195f87338b2993ef5"
+  }
+}

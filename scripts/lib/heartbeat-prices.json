@@ -1,0 +1,113 @@
+{
+  "_owner": "intellisense platform team",
+  "_update_trigger": "Any Anthropic model release or pricing change. Update this file in the same PR that bumps intellisense VERSION.",
+  "_units": "USD per 1,000,000 tokens (per-type rates: input, output, cache_creation, cache_read)",
+  "_schema_version": 1,
+  "_last_verified": "2026-06-04",
+  "_pricing_sources": [
+    "https://platform.claude.com/docs/en/docs/about-claude/pricing — Anthropic official, verified 2026-06-03",
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json — LiteLLM (same source ccusage uses)",
+    "https://www.anthropic.com/news/claude-opus-4-8 — 4.8 launch, 2026-05-28 (same price as 4.7)"
+  ],
+  "_pricing_notes": [
+    "Opus 4.5+ moved from the $15/$75 tier (Opus 4.1 era) down to $5/$25 per Mtok.",
+    "cache_creation_per_mtok is the 5-minute cache write rate (1.25x base input). 1-hour cache writes (2x base) are not currently distinguished in transcripts — most CLI usage is 5m.",
+    "cache_read_per_mtok is the cache-hit rate (0.1x base input).",
+    "1M-context variants on Opus 4.6/4.7/4.8 and Sonnet 4.6 ship at standard pricing per Anthropic docs — no surcharge, so we list the [1m] / -1m aliases under the same price record.",
+    "<synthetic> is a Claude Code placeholder model id for compaction/system events. It consumes real tokens but has no billable model, so it is listed under known_zero_cost: counted in token totals at 0 cost, NOT surfaced in unknown_models, and does NOT flip cost_estimation_status to partial."
+  ],
+  "known_zero_cost": [
+    "<synthetic>"
+  ],
+  "models": [
+    {
+      "canonical": "claude-opus-4-8",
+      "aliases": [
+        "claude-opus-4-8",
+        "claude-opus-4-8-1m",
+        "claude-opus-4-8[1m]"
+      ],
+      "input_per_mtok": 5.00,
+      "output_per_mtok": 25.00,
+      "cache_creation_per_mtok": 6.25,
+      "cache_read_per_mtok": 0.50
+    },
+    {
+      "canonical": "claude-opus-4-7",
+      "aliases": [
+        "claude-opus-4-7",
+        "claude-opus-4-7-1m",
+        "claude-opus-4-7[1m]"
+      ],
+      "input_per_mtok": 5.00,
+      "output_per_mtok": 25.00,
+      "cache_creation_per_mtok": 6.25,
+      "cache_read_per_mtok": 0.50
+    },
+    {
+      "canonical": "claude-opus-4-6",
+      "aliases": [
+        "claude-opus-4-6",
+        "claude-opus-4-6-1m",
+        "claude-opus-4-6[1m]"
+      ],
+      "input_per_mtok": 5.00,
+      "output_per_mtok": 25.00,
+      "cache_creation_per_mtok": 6.25,
+      "cache_read_per_mtok": 0.50
+    },
+    {
+      "canonical": "claude-opus-4-5",
+      "aliases": [
+        "claude-opus-4-5"
+      ],
+      "input_per_mtok": 5.00,
+      "output_per_mtok": 25.00,
+      "cache_creation_per_mtok": 6.25,
+      "cache_read_per_mtok": 0.50
+    },
+    {
+      "canonical": "claude-opus-4-1",
+      "aliases": [
+        "claude-opus-4-1"
+      ],
+      "input_per_mtok": 15.00,
+      "output_per_mtok": 75.00,
+      "cache_creation_per_mtok": 18.75,
+      "cache_read_per_mtok": 1.50
+    },
+    {
+      "canonical": "claude-sonnet-4-6",
+      "aliases": [
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-6-1m",
+        "claude-sonnet-4-6[1m]"
+      ],
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_creation_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    },
+    {
+      "canonical": "claude-sonnet-4-5",
+      "aliases": [
+        "claude-sonnet-4-5"
+      ],
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_creation_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    },
+    {
+      "canonical": "claude-haiku-4-5",
+      "aliases": [
+        "claude-haiku-4-5",
+        "claude-haiku-4-5-20251001"
+      ],
+      "input_per_mtok": 1.00,
+      "output_per_mtok": 5.00,
+      "cache_creation_per_mtok": 1.25,
+      "cache_read_per_mtok": 0.10
+    }
+  ]
+}

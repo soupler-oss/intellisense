@@ -1,0 +1,153 @@
+# intellisense governance policy. Reference: https://github.com/soupler-oss/intellisense/blob/main/docs/policy.md
+# This file is itself Tier 2: changing it needs a task reference and a change contract, and CI evaluates a
+# pull request against the policy on its base branch, so a PR cannot loosen its own gate.
+version: 1
+
+# Stacks whose rules are vendored into .intellisense/rules/ (built-in: go, php, angular, react, node, python, java, flutter, rust, csharp, ruby, swift, cpp; or define custom_stacks).
+stacks: []
+# Coding agents to write instructions for (claude, codex, copilot, cursor). Run `intellisense sync` after changing this.
+agents: []
+# Portable Claude Code skills to install into .claude/skills/ (see `intellisense skills list`).
+skills: []
+
+# Every change is at least this tier. Raise it for repositories where everything is sensitive.
+minimum_tier: 0
+# Tier for a file that matches no rule below.
+default_tier: 1
+# A default-tier file whose diff only changes comments drops to Tier 0. Never applies to files a rule matched.
+fast_lane: true
+# What a likely secret in an added line does: off, warn or block.
+secrets: warn
+# Remotes the pre-push hook refuses (e.g. [upstream] when everyone pushes to a fork).
+blocked_remotes: []
+
+# Risk tiers, highest first. Each file gets the level of the first tier (from the top) with a matching rule,
+# else default_tier; the change gets its highest file level. Add a tier (levels 0-9) or change what one
+# requires: any of task, contract, test. Rules are RE2 regular expressions on the repo-relative path.
+tiers:
+  - level: 2
+    name: 'high risk'
+    requires: ['task', 'contract']
+    rules:
+      - pattern: '(^|/)([Aa]uth|[Oo]auth|[Aa]uthentication|[Aa]uthorization|jwt|JWT|sso|SSO)([._/-]|$)'
+        reason: 'auth/identity'
+      - pattern: '(^|/)([Pp]ayments?|[Bb]illing|[Aa]ccounts?|[Jj]ournal|[Ii]nvoices?|[Ff]inancial)([._/-]|$)'
+        reason: 'financial'
+      - pattern: '(^|/)[Mm]igrations?/.+\.(sql|py|rb|php|go|js|ts|java|kt|xml|ya?ml)$'
+        reason: 'database migration'
+      - pattern: '(^|/)([Ss]ecrets?|[Cc]redentials?|[Cc]rypto|[Ee]ncryption)([._/-]|$)'
+        reason: 'secrets/crypto'
+      - pattern: '^\.intellisense\.yml$'
+        reason: 'governance policy'
+      - pattern: '^(internal/(gate|tier|policy|hook|contract|tracker)/[^/]+\.go|hooks/pre-push|action\.yml|scripts/preToolUse-contract-gate\.sh|scripts/lib/(effective-tier|safe-lane)\.sh)$'
+        reason: 'the gate itself'
+      - pattern: '^rules/baseline/'
+        reason: 'baseline rule'
+      - pattern: '^\.github/governance/rulesets/'
+        reason: 'branch protection'
+      - pattern: '^\.intellisense/rules/baseline/'
+        reason: 'baseline rule'
+  - level: 1
+    name: 'standard'
+    requires: ['task', 'contract']
+    rules:
+      # This repository's own platform: what every developer's Live mode and every governed repo inherits.
+      - pattern: '^(skills|agents|templates|infrastructure|hook-packs|hooks|scripts|rules)/'
+        reason: 'platform content'
+      - pattern: '^(setup|setup-repos|verify-setup|restore|install)\.sh$'
+        reason: 'installer'
+      - pattern: '^\.github/workflows/'
+        reason: 'CI/CD'
+      - pattern: '(^|/)(\.gitlab-ci\.yml|Jenkinsfile|azure-pipelines\.yml)$'
+        reason: 'CI/CD'
+      - pattern: '(^|/)Dockerfile[^/]*$'
+        reason: 'container'
+      - pattern: '(^|/)(docker-)?compose[^/]*\.ya?ml$'
+        reason: 'container'
+      - pattern: '(^|/)(infra|infrastructure|terraform|deploy|deployment|k8s|kubernetes|helm|charts)/'
+        reason: 'infrastructure'
+      - pattern: '\.tf$'
+        reason: 'infrastructure'
+      - pattern: '(^|/)(go\.(mod|sum)|package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|Gemfile(\.lock)?|Cargo\.(toml|lock)|pubspec\.(yaml|lock))$'
+        reason: 'dependencies'
+      - pattern: '^\.intellisense/'
+        reason: 'governance rules'
+      - pattern: '^(AGENTS|CLAUDE)\.md$'
+        reason: 'agent instructions'
+      - pattern: '^\.github/(copilot-instructions\.md|instructions/)'
+        reason: 'agent instructions'
+      - pattern: '^\.cursor/rules/'
+        reason: 'agent instructions'
+      - pattern: '^\.github/CODEOWNERS$'
+        reason: 'ownership'
+  - level: 0
+    name: 'routine'
+    requires: []
+    rules:
+      - pattern: '\.(md|MD|markdown|rst|txt|adoc)$'
+        reason: 'documentation'
+      - pattern: '(^|/)docs?/'
+        reason: 'documentation'
+      - pattern: '(^|/)(README|CHANGELOG|LICENSE|NOTICE|CONTRIBUTING)[^/]*$'
+        reason: 'documentation'
+      - pattern: '(^|/)(tests?|__tests__|specs?|testdata|fixtures)/'
+        reason: 'tests'
+      - pattern: '_test\.(go|py)$'
+        reason: 'tests'
+      - pattern: '(^|/)test_[^/]+\.py$'
+        reason: 'tests'
+      - pattern: '\.(test|spec)\.[cm]?[jt]sx?$'
+        reason: 'tests'
+      - pattern: '(Test|Tests|Spec)\.(java|kt|php|cs|swift)$'
+        reason: 'tests'
+      - pattern: '(^|/)test[^/]*\.sh$'
+        reason: 'tests'
+
+evidence:
+  # Each commit at a tier that requires `task` carries its own trailer, e.g. "Refs: PROJ-12".
+  task_trailers: ['Refs', 'Task', 'Beads']
+  # Ask integrations.tracker whether each task reference exists (needs the tracker's CLI or token).
+  verify_tasks: false
+  # A change contract is a commit-message line "<marker>: scope=..., risk=low", or a changed .md file under
+  # paths with the fields as front matter (`intellisense contract new` writes one from the template).
+  contract:
+    marker: 'Change Contract'
+    paths: ['.intellisense/contracts/']
+    template: ''
+    fields:
+      - name: 'scope'
+        required: true
+      - name: 'risk'
+        required: true
+        values: ['low', 'medium', 'high']
+      - name: 'confidence'
+        type: number
+        min: 0
+        max: 1
+      - name: 'files_affected'
+        type: integer
+        min: 0
+      - name: 'estimated_lines'
+        type: integer
+        min: 0
+  # Paths that count as tests, for tiers that require `test`.
+  test_patterns:
+    - pattern: '(^|/)(tests?|__tests__|specs?|testdata)/'
+      reason: 'test directory'
+    - pattern: '(_test\.(go|py)|\.(test|spec)\.[cm]?[jt]sx?|(Test|Tests|Spec)\.(java|kt|php|cs|swift)|_spec\.rb)$'
+      reason: 'test file'
+    - pattern: '(^|/)test_[^/]+\.py$'
+      reason: 'test file'
+
+# Your own languages: a rule file you keep in .intellisense/rules/language-specific/ and the files it covers.
+custom_stacks: []
+
+# Optional tools. tracker: none, beads, github, jira, linear. code_intel (Live mode): none, code-review-graph.
+integrations:
+  tracker: none
+  code_intel: none
+
+# Switch off vendored rules by path under .intellisense/rules/ without .md, e.g. [operational/proof-standards].
+# To change a rule instead, edit its file: `intellisense rules update` keeps files you have edited.
+rules:
+  disable: []

@@ -1,0 +1,30 @@
+name: Intellisense
+
+# This repository runs its own gate on itself. The gate's code and the policy both come from the pull
+# request's BASE, so a pull request cannot change the gate (or .intellisense.yml) to pass itself.
+#
+# It runs on pull requests into develop. main only receives develop, which has already been gated, so it
+# is not required there. Dependabot's version bumps carry no task trailer and are skipped (a skipped
+# required check counts as passed).
+on:
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Intellisense Gate
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check out the gate from the base branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .intellisense-gate
+      - uses: ./.intellisense-gate

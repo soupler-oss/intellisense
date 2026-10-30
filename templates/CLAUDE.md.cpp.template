@@ -1,0 +1,135 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: [C {{STACK_VERSION}}|C++{{STACK_VERSION}}] built with [CMake|Meson|Bazel]
+- **Libraries**: [list key libraries]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/cpp-patterns.md` — Naming, RAII and memory safety, bounds, concurrency, sanitizers
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+C++ service handling order processing for the billing domain.
+Exposes a gRPC API; reads user profiles from auth-service.
+All database access through prepared statements; amounts are int64_t minor units.
+Built with CMake; CI runs AddressSanitizer and UndefinedBehaviorSanitizer.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: src/payments/ledger.cc] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/auth/token_verifier.cc] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `CMakeLists.txt` — targets, flags, dependencies
+- `src/main.cc` — entry point and wiring
+- `src/` — modules, one header and source per unit
+- `include/` — public headers
+- `tests/` — GoogleTest / Catch2
+
+Layers and their purpose:
+- `src/api/` → Request parsing and validation, call into services
+- `src/services/` → Business logic
+- `src/storage/` → Database access through prepared statements
+- `tests/` → Real-persistence-path tests for P1/P2 (see `cpp-patterns.md`)
+
+## Upstream Dependencies
+
+[List services/repos this depends on. Example:]
+- `auth-service` — user identity, role lookup
+- `notification-service` — outbound email/SMS
+
+## Downstream Consumers
+
+[List services/repos that depend on this. Example:]
+- `web-frontend` — REST API consumer
+- `mobile-app` — REST API consumer
+- `analytics-pipeline` — reads outbound Kafka topic
+
+## Domain Terms
+
+[Service-specific glossary. Example:]
+- **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
+- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+
+## Run / Test / Build
+
+```bash
+# Configure + build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+
+# Test
+ctest --test-dir build --output-on-failure
+
+# Sanitizers
+cmake -S . -B build-asan -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined" && cmake --build build-asan && ctest --test-dir build-asan
+```
+
+## Known Gotchas
+
+[Service-specific quirks. Examples:]
+- **Raw buffers**: `strcpy`/`sprintf` on input are memory-safety bugs; use bounded APIs. See `cpp-patterns.md §Memory and Resource Safety`.
+- **Size overflow**: check before multiplying lengths read from input.
+- **Data races**: run ThreadSanitizer on concurrent code.

@@ -1,0 +1,239 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: Java
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## Stack Details
+
+Filled at onboarding by the repo author. Each field is mandatory; an unfilled
+field is treated as a PR blocker by `/code-review` and surfaces as a TODO during
+session start.
+
+- **Java version**: [8 | 11 | 17 | 21]
+- **Spring Boot version**: [e.g. 2.7.18, 3.2.4 — pin the exact running version]
+- **Build tool**: [Maven | Gradle | Gradle (Kotlin DSL)]
+- **Web stack**: [Spring MVC (servlet) | Spring WebFlux (reactive) | Plain Servlet | none — library only]
+- **Persistence**: [Spring Data JPA + Hibernate | JdbcTemplate | MyBatis | jOOQ | none — stateless]
+- **Lombok**: [yes | no]
+- **Database**: [MySQL <version> | PostgreSQL <version> | MariaDB <version> | Oracle | other]
+- **Migration tool**: [Flyway | Liquibase | none-yet]
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/java-patterns.md` — Version matrices, Spring Boot deltas, Spring/JPA patterns, real-persistence tests
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+Handles order placement and fulfillment for the marketplace domain.
+Reads user profiles from auth-service; emits dispatch events to logistics-service.
+All database access via Spring Data JPA with @Transactional service-layer boundary.
+Financial operations use BigDecimal and SELECT FOR UPDATE on balance mutations.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: path/to/Service.java] | [XX KB] | [Reason: e.g., core financial logic, shared by all callers] |
+| [TODO: path/to/Controller.java] | [XX KB] | [Reason: e.g., all API entry points route through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `controller/[Main]Controller.java` — `@RestController` HTTP entry, request parsing, validation
+- `service/[Main]Service.java` — `@Service` business logic, `@Transactional` boundary
+- `repository/[Main]Repository.java` — Spring Data JPA repository interface
+- `domain/[Main].java` — `@Entity` definitions (or records for DTOs ≥ Java 16)
+- `config/[Main]Config.java` — `@Configuration` beans (DataSource, Web, Security)
+
+Layers and their purpose:
+- `controller/` → Parse request, validate via `@Valid`, route to service (≤50 lines each)
+- `service/` → Business logic, `@Transactional` on service methods (no DB calls bypass repository)
+- `repository/` → Spring Data JPA repositories; no business logic
+- `domain/` (or `entity/`) → `@Entity` + DTO records; no logic, no DB calls
+- `config/` → Cross-cutting beans, Spring Security, datasource pool, web config
+- `exception/` → Custom domain exceptions + `@RestControllerAdvice` global handler
+- `src/main/resources/db/migration/` → Flyway versioned migrations (`V<ts>__<desc>.sql`)
+- `src/test/java/` → JUnit 5 tests mirroring main package layout (`*Test.java`, `*IT.java`)
+
+## Upstream Dependencies
+
+Services this repo depends on (and why):
+- `[service-name]`: [what data or capability this repo consumes from it]
+
+## Downstream Consumers
+
+Services that depend on this repo (and what they consume):
+- `[service-name]`: [which endpoint or event they consume]
+
+## Shared Database Tables
+
+Tables written by this service AND at least one other service (2+ writers only):
+- `[table]`: also written by `[service-name, service-name]`
+
+Do NOT list tables only read by this service.
+
+## API Contracts
+
+Endpoints consumed by OTHER services (not internal routes, not frontend-only):
+- `[METHOD /path/vN]`: consumed by `[service]` — [brief description]
+
+## Domain Terms
+
+Service-specific terms that mean something different here than in other services:
+- `[Term]`: [Definition specific to this service]
+
+## Financial Rules
+
+Business rules governing money handling (fill if this service touches financial data):
+- `[Rule]`: [Why it matters — what goes wrong without it]
+
+Example:
+```
+- All amounts as BigDecimal with explicit RoundingMode: Prevents float rounding errors
+- SELECT FOR UPDATE on balance mutations: Prevents race conditions under concurrent load
+- Idempotency keys required on all state-changing ops: Safe retry semantics
+- DECIMAL(15,4) column type, never DOUBLE: Database-level precision guarantee
+```
+
+## Escalation Triggers
+
+Repo-specific high-risk patterns. Encountering any of these during a task escalates the
+Change Contract `risk_level` by one tier and requires explicit user confirmation before proceeding:
+
+- **Editing a merged Flyway V-file**: Flyway checksums in `flyway_schema_history` make this a deploy-breaker — write a new V-file instead, never edit a merged one
+- **Hibernate `ddl-auto: update` or `create` in any profile**: Flyway/Liquibase owns schema, not Hibernate — escalate immediately
+- **Actuator endpoint exposure**: `/actuator/env`, `/actuator/configprops`, `/actuator/heapdump` leak secrets if exposed without auth — confirm `management.endpoints.web.exposure.include` is an explicit allowlist (never `*`)
+- **Spring placeholder `${VAR:?message}`**: Bash syntax, NOT Spring — Spring parses as `default="?message"` and silently boots. Use `${VAR}` (no default → fail-fast) or `${VAR:}` + `@PostConstruct` validator
+- **`double` / `float` for money**: BigDecimal is mandatory for any monetary calculation in this repo
+- **Shared library modification**: Changes affect ALL downstream consumers; run `/discover-impact` before modifying any shared package
+- [TODO: add repo-specific escalation triggers here]
+
+## Run / Test / Build
+
+```bash
+# Maven
+mvn spring-boot:run                 # Run locally
+mvn test                            # Run all tests
+mvn -Dtest=ClassName#method test    # Run a single test
+mvn package                         # Build jar
+mvn package -DskipTests             # Build skipping tests
+mvn dependency:resolve              # Resolve deps after `git worktree add`
+mvn dependency:tree                 # Dependency tree
+
+# Gradle (use ./gradlew instead of bare `gradle` to pin wrapper version)
+./gradlew bootRun                   # Run locally
+./gradlew test                      # Run all tests
+./gradlew test --tests ClassName.method    # Run a single test
+./gradlew bootJar                   # Build jar
+./gradlew bootJar -x test           # Build skipping tests
+./gradlew dependencies              # Dependency tree
+
+# Build verification after worktree add (compile-only, fast)
+mvn compile                         # or: ./gradlew compileJava
+```
+
+## MCP Tools
+
+This repo's stack classification (mandatory-supported / candidate-supported / weak / unsupported) is the authoritative source for whether `code-review-graph` is required, advisory, or best-effort here. Read it once from `rules/operational/graph-supported-stacks.md` (single source of truth) — do not infer the policy from this template, which only applies as an example baseline.
+
+Java is currently classified `candidate-supported`. The graph runs best-effort and any output is auto-prefixed `[INTELLISENSE-WEAK-STACK: java — <reason>]`.
+
+When the graph is available, prefer it over Grep/Read for these engineering questions (defined in `rules/operational/intelligence-sources.md` — refer to that file for the current set):
+- `change-spread`, `who-calls`, `what-changed-and-where-does-it-spread`
+
+Fall back to Grep/Read for raw text/regex search or when the graph does not cover the query.
+
+## Task Tracking
+
+Every Tier 1+ commit carries its own task reference, with a key from `evidence.task_trailers` in `.intellisense.yml`
+(`Task: PROJ-12`, `Refs: #123`, or `Beads: <id>` when the team tracks work in Beads); the change also carries one
+change contract. The pre-push hook and CI block a Tier 1+ push without them. Run `intellisense classify` to see a
+change's tier.
+
+Tier 0 (docs, tests, comment-only edits) needs neither. Anything touching API/DB/auth/financial/migration/cross-service
+is Tier 1+; the policy's path rules decide.
+
+## Forbidden Content
+
+The following must NEVER appear in this file. If found during a review, delete it and move to
+the correct location:
+
+- Phase definitions, gate conditions, or approval flows → `development-workflow-impl.md`
+- Mode detection rules or mode table → `development-workflow.md`
+- Security checklist items (XSS, CSRF, PII, SQL injection) → `security.md`
+- Java/Spring naming conventions (PascalCase, camelCase, package layout) → `java-patterns.md`
+- Commit format, branch naming, PR requirements → `git-workflow.md`
+- Risk report JSON schema → `development-workflow-impl.md`
+- TDD cycle instructions (RED/GREEN/IMPROVE) → `development-workflow-impl.md`
+- Any rule that applies to ALL repos equally → belongs in intellisense global, not here
+
+## intellisense Health
+
+<!-- Auto-updated by /intellisense-audit -->
+@.intellisense-doc-health.json
+
+Last audit: [YYYY-MM-DD] | Score: [N]/100
+
+---
+
+**Last Updated**: [YYYY-MM-DD]
+**CLAUDE.md Version**: 4.0 (intellisense-aligned)
+**Stack**: Java

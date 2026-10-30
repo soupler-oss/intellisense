@@ -1,0 +1,139 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: Ruby {{STACK_VERSION}} with [Rails|Sinatra|Hanami]
+- **ORM**: [Active Record|Sequel|none]
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/ruby-patterns.md` — Naming, error handling, Rails conventions, money and locking, migrations
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+Rails API service handling order processing for the billing domain.
+Reads user profiles from auth-service; enqueues payout jobs with Sidekiq.
+Balance updates run in a transaction with `with_lock`; amounts are integer cents (money-rails).
+Idempotency keys are enforced by a unique index.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: app/services/payments/refund.rb] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: app/controllers/concerns/authentication.rb] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `config/routes.rb` — the HTTP surface
+- `app/controllers/` — thin controllers; strong parameters
+- `app/services/` — business logic (service objects)
+- `app/models/` — Active Record models, validations, scopes
+- `db/migrate/` — migrations (reviewed before merge)
+- `spec/` or `test/` — RSpec or Minitest
+
+Layers and their purpose:
+- `controllers/` → Parameters, authorisation, call a service, render
+- `services/` → Business logic and side effects (payments, emails, jobs)
+- `models/` → Persistence, validations, associations
+- `spec/` → Real-persistence-path request specs for P1/P2 (see `ruby-patterns.md`)
+
+## Upstream Dependencies
+
+[List services/repos this depends on. Example:]
+- `auth-service` — user identity, role lookup
+- `notification-service` — outbound email/SMS
+
+## Downstream Consumers
+
+[List services/repos that depend on this. Example:]
+- `web-frontend` — REST API consumer
+- `mobile-app` — REST API consumer
+- `analytics-pipeline` — reads outbound Kafka topic
+
+## Domain Terms
+
+[Service-specific glossary. Example:]
+- **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
+- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+
+## Run / Test / Build
+
+```bash
+# Install
+bundle install
+
+# Test
+bundle exec rspec          # or: bin/rails test
+
+# Lint
+bundle exec rubocop
+
+# Run
+bin/rails server
+```
+
+## Known Gotchas
+
+[Service-specific quirks. Examples:]
+- **`rescue => e; nil`** hides failures; rescue specific errors and re-raise or report. See `ruby-patterns.md §Errors`.
+- **N+1 queries**: preload associations used in loops (`includes`).
+- **`update_column` / `update_all`** skip validations and callbacks; avoid on money columns.

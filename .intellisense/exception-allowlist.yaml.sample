@@ -1,0 +1,40 @@
+# .intellisense/exception-allowlist.yaml — Sample
+#
+# Purpose: exempt specific commit SHAs from Intellisense-Metadata trailer enforcement
+# (Layer 2 pre-push gate). Use sparingly — every entry is a
+# documented gap in the audit chain.
+#
+# When you might need an entry:
+#   - Commits made before intellisense was installed, backfilled into a branch
+#   - Commits authored on a machine where the prepare-commit-msg hook is
+#     not installed (e.g. GUI client, CI bot, external contributor)
+#   - Emergency hotfix that bypassed normal intellisense flow (post-incident)
+#
+# Governance (enforced by hooks/pre-push:_allowlist_check):
+#   - reason       : required, non-empty rationale
+#   - expiry       : required, YYYY-MM-DD; MUST be in future, MUST be ≤ 90
+#                    days from today (governance cap; long-lived exceptions
+#                    are technical debt, not exemptions)
+#   - added_by     : required, approver email; MUST NOT equal the commit's
+#                    author email (no self-approval)
+#
+# Schema:
+#   - sha: "<40-char hex SHA>"
+#     reason: "<one-line rationale>"
+#     expiry: "YYYY-MM-DD"
+#     added_by: "approver@your-org.example"
+#
+# Copy this file to .intellisense/exception-allowlist.yaml and edit per your needs.
+# The sample file itself is ignored by the gate (only exact filename matches).
+
+# Example 1: emergency hotfix that bypassed the prepare-commit-msg hook
+- sha: "0000000000000000000000000000000000000000"
+  reason: "Hotfix during prod incident 2026-05-21; prepare-commit-msg hook not installed on responder's laptop"
+  expiry: "2026-08-19"
+  added_by: "incident-commander@your-org.example"
+
+# Example 2: backfill of historical commit
+- sha: "1111111111111111111111111111111111111111"
+  reason: "Commit made before intellisense was installed"
+  expiry: "2026-06-20"
+  added_by: "platform-team@your-org.example"

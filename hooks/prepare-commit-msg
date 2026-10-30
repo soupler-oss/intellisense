@@ -1,0 +1,513 @@
+#!/usr/bin/env bash
+# hooks/prepare-commit-msg
+#
+# prepare-commit-msg — Inject intellisense analytics trailers into the commit message.
+# Two-phase token cursor (this hook = Phase 1; hooks/post-commit = Phase 2).
+#
+# Every commit gets one Intellisense-Metadata trailer (a JSON object). Tier 1/2
+# commits add skills, rules_expected and agents; commits made outside an
+# intellisense session get a minimal stub so adoption stays measurable.
+#
+
+set -uo pipefail
+
+COMMIT_MSG_FILE="${1:-.git/COMMIT_EDITMSG}"
+COMMIT_SOURCE="${2:-}"
+
+# ─── Always emit an Intellisense-Metadata trailer ─────────────────────
+# Every commit on this machine carries an Intellisense-Metadata trailer so the
+# adoption rate is measurable. Readers ignore fields they do not know.
+emit_trailer_and_exit() {
+    local json="$1"
+    local strip_regex="^Intellisense-Metadata:"
+    local tmp; tmp="$(mktemp)"
+    grep -vE "$strip_regex" "$COMMIT_MSG_FILE" > "$tmp" 2>/dev/null || cp "$COMMIT_MSG_FILE" "$tmp"
+    awk 'BEGIN{empty=""} /^$/{empty=empty"\n"; next} {printf "%s%s\n", empty, $0; empty=""}' "$tmp" > "$tmp.trim"
+    mv "$tmp.trim" "$tmp"
+    echo "" >> "$tmp"
+    echo "Intellisense-Metadata: $json" >> "$tmp"
+    mv "$tmp" "$COMMIT_MSG_FILE"
+    exit 0
+}
+
+emit_merge_stub() {
+    emit_trailer_and_exit '{"v":1,"author_type":"merge","commit_kind":"merge","stamping_source":"local_hook"}'
+}
+
+emit_squash_stub() {
+    # squash is a distinct enum value, NOT conflated with merge.
+    # The merge-method policy needs this distinction to attribute squash-related trailer loss.
+    emit_trailer_and_exit '{"v":1,"author_type":"squash","commit_kind":"squash","stamping_source":"local_hook"}'
+}
+
+# Path tier from the intellisense engine, the only tier model (internal/tier, reading the repository's
+# .intellisense.yml). Paths on stdin; prints the tier, or 0 when the engine is not installed — the push
+# gate, which requires the engine, still checks the evidence.
+_intellisense_engine() {
+    local candidate
+    for candidate in "${INTELLISENSE_BIN:-}" "${INTELLISENSE_HOME:-$HOME/.intellisense}/bin/intellisense"; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    command -v intellisense 2>/dev/null
+}
+_engine_path_tier() {
+    local engine path n=0 t
+    engine="$(_intellisense_engine)"
+    set --
+    while IFS= read -r path || [ -n "$path" ]; do
+        [ -z "$path" ] && continue
+        set -- "$@" "$path"
+        n=$((n + 1))
+    done
+    if [ "$n" -eq 0 ] || [ -z "$engine" ]; then
+        printf '0'
+        return 0
+    fi
+    t="$("$engine" classify --tier-only "$@" 2>/dev/null)"
+    case "$t" in [0-9]) printf '%s' "$t" ;; *) printf '0' ;; esac
+}
+
+# Path tier of the staged files (dev-stub commits stamp the real tier, not 0).
+_derive_path_tier_from_staged() {
+    git diff --cached --name-only 2>/dev/null | _engine_path_tier
+}
+
+emit_no_session_signal_stub() {
+    # Privacy: no session UUID, no cwd, no tokens, no version (full
+    # version omitted — dev-stub commits don't need it).
+    # The tier is path-derived from staged files.
+    local tier
+    tier="$(_derive_path_tier_from_staged)"
+    emit_trailer_and_exit "{\"v\":1,\"author_type\":\"no_session_signal\",\"commit_kind\":\"single\",\"stamping_source\":\"local_hook\",\"tier\":$tier}"
+}
+
+emit_classification_corrupt_stub() {
+    # classification.json exists but tier/mode are missing.
+    local sid="$1"
+    emit_trailer_and_exit "{\"v\":1,\"author_type\":\"claude_with_intellisense\",\"commit_kind\":\"single\",\"stamping_source\":\"local_hook\",\"classification_state\":\"corrupt\",\"session\":\"$sid\"}"
+}
+
+emit_classification_missing_stub() {
+    # SID comes from .intellisense/session/current-session-id (UUID; no JSON metachars).
+    local sid="$1"
+    emit_trailer_and_exit "{\"v\":1,\"author_type\":\"claude_with_intellisense\",\"commit_kind\":\"single\",\"stamping_source\":\"local_hook\",\"classification_state\":\"missing\",\"session\":\"$sid\"}"
+}
+
+emit_jq_unavailable_stub() {
+    # Hand-rolled JSON because jq is unavailable. tooling_state surfaces the
+    # tooling drift to the dashboard; the commit itself proceeds with an
+    # honest "degraded-but-present" trailer.
+    local sid="$1"
+    emit_trailer_and_exit "{\"v\":1,\"author_type\":\"claude_with_intellisense\",\"commit_kind\":\"single\",\"stamping_source\":\"local_hook\",\"classification_state\":\"unavailable\",\"tooling_state\":\"jq_unavailable\",\"session\":\"$sid\"}"
+}
+
+# Merge/squash commits don't represent author activity → respective stub
+# (squash is distinct from merge)
+case "$COMMIT_SOURCE" in
+    merge) emit_merge_stub ;;
+    squash) emit_squash_stub ;;
+esac
+
+# Determine INTELLISENSE_SETUP path (where this hook's source script lives).
+# Hooks may be symlinked from .git/hooks/ → $INTELLISENSE_SETUP/hooks/ — resolve the
+# symlink to find VERSION + scripts/classifier-rules.json.
+HOOK_SOURCE="$(readlink "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+if [[ "$HOOK_SOURCE" != /* ]]; then
+    HOOK_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd "$(dirname "$HOOK_SOURCE")" && pwd)/$(basename "$HOOK_SOURCE")"
+fi
+INTELLISENSE_SETUP="$(cd "$(dirname "$HOOK_SOURCE")/.." && pwd)"
+
+# Workspace = current git repo root (where .intellisense/session lives)
+WS="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
+SESSION_DIR="$WS/.intellisense/session"
+
+# ─── Step 1: Identify active session ────────────────────────────────────────
+POINTER="$SESSION_DIR/current-session-id"
+if [[ ! -f "$POINTER" ]]; then
+    # No active Claude Code session — emit no_session_signal stub.
+    emit_no_session_signal_stub
+fi
+SID="$(cat "$POINTER" 2>/dev/null)"
+[[ -z "$SID" ]] && emit_no_session_signal_stub
+
+# ─── Step 2: Load classification ────────────────────────────────────────────
+CLASSIFICATION="$SESSION_DIR/$SID.classification.json"
+if [[ ! -f "$CLASSIFICATION" ]]; then
+    # Pointer exists but classification.json doesn't — state corruption.
+    # Emit claude_with_intellisense + classification_state=missing stub. Still log
+    # drift to ~/.claude-intellisense/trailer-drift.log so the dashboard sees it.
+    echo "[intellisense] warning: current-session-id=$SID but classification.json missing/corrupt. Emitting degraded trailer." >&2
+    mkdir -p "$HOME/.claude-intellisense" 2>/dev/null
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] missing-classification session=$SID cwd=$WS" \
+        >> "$HOME/.claude-intellisense/trailer-drift.log" 2>/dev/null || true
+    emit_classification_missing_stub "$SID"
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+    # Emit degraded trailer (hand-rolled JSON, no jq needed). The dashboard
+    # treats tooling_state != ok as a tooling-drift signal.
+    echo "[intellisense] warning: jq not found, emitting degraded trailer (tooling_state=jq_unavailable)." >&2
+    emit_jq_unavailable_stub "$SID"
+fi
+
+# Check for corrupted_cursor written by post-commit on a prior
+# commit. Per the plan: token-attribution corruption blocks the next intellisense
+# commit EVEN IN PILOT, because silently advancing past a corrupted state
+# would re-attribute already-counted tokens (data corruption, not drift).
+# Resolution: dev runs `bash setup.sh --resolve-cursor` to choose how to
+# advance.
+CURSOR_FILE_PRECHECK="$SESSION_DIR/$SID.token-cursor.json"
+if [[ -f "$CURSOR_FILE_PRECHECK" ]] && command -v jq >/dev/null 2>&1; then
+    HAS_CORRUPTED="$(jq -r '.corrupted_cursor // empty' "$CURSOR_FILE_PRECHECK" 2>/dev/null)"
+    if [[ -n "$HAS_CORRUPTED" ]]; then
+        echo "❌ [intellisense] BLOCKED: token cursor is in a corrupted state from a prior commit" >&2
+        echo "   This means the previous commit's token payload was missing, unparseable, or" >&2
+        echo "   its session was edited. Silently advancing now would re-count already-attributed" >&2
+        echo "   tokens, causing data corruption downstream." >&2
+        echo "" >&2
+        echo "   Fix: bash $INTELLISENSE_SETUP/setup.sh --resolve-cursor" >&2
+        echo "        (offers: (a) trust the final commit's tokens as authoritative, or" >&2
+        echo "                 (b) reset to last clean committed_cursor)" >&2
+        echo "" >&2
+        echo "   Inspect: cat $CURSOR_FILE_PRECHECK" >&2
+        echo "   Log:     ~/.claude-intellisense/cursor-conflicts.log" >&2
+        # Block even in pilot mode — token attribution drift is data corruption,
+        # not advisory trailer drift.
+        exit 1
+    fi
+fi
+
+TIER="$(jq -r '.tier // empty' "$CLASSIFICATION" 2>/dev/null)"
+MODE="$(jq -r '.mode // empty' "$CLASSIFICATION" 2>/dev/null)"
+if [[ -z "$TIER" || -z "$MODE" ]]; then
+    # classification.json exists but missing tier/mode →
+    # emit corrupt stub instead of silent-exit. Was a remaining
+    # "always emit" gap in the first release.
+    echo "[intellisense] warning: classification.json missing tier/mode fields (sid=$SID) — emitting corrupt stub." >&2
+    emit_classification_corrupt_stub "$SID"
+fi
+
+# ─── Step 2.5: Compose effective tier ──────────────────
+# Bug fix: per-prompt classifier tier can drift mid-task (sub-prompt
+# heuristic misclassifications); the stamped trailer must reflect the actual
+# risk implied by staged paths and repo policy floor, not the classifier's
+# last word. Mirrors the composition in scripts/preToolUse-contract-gate.sh
+# and hooks/pre-push so an in-session edit, a local commit, and a push all
+# agree on the same effective tier for the same staged set.
+#
+# effective_tier = max(classifier_tier, staged_path_tier, policy_tier)
+#
+# Source the canonical library when reachable (gives us the full Tier 2
+# pattern set + policy floor); fall back to the local _derive_path_tier_from_staged
+# function (Tier 1 patterns) plus inline max for degraded installs where
+# .git/hooks/ cannot reach scripts/lib/. Defensive normalization: any
+# non-{0,1,2} value is treated as 0.
+case "$TIER" in 0|1|2) ;; *) TIER=0 ;; esac
+PATH_TIER="$(_derive_path_tier_from_staged)"
+POLICY_TIER="0"
+EFFECTIVE_TIER_LIB="$INTELLISENSE_SETUP/scripts/lib/effective-tier.sh"
+if [[ -f "$EFFECTIVE_TIER_LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$EFFECTIVE_TIER_LIB" 2>/dev/null || true
+fi
+if declare -F intellisense_policy_tier >/dev/null 2>&1; then
+    POLICY_TIER="$(intellisense_policy_tier "$WS")"
+fi
+if declare -F intellisense_effective_tier >/dev/null 2>&1; then
+    TIER="$(intellisense_effective_tier "$TIER" "$PATH_TIER" "$POLICY_TIER")"
+else
+    for _candidate in "$PATH_TIER" "$POLICY_TIER"; do
+        case "$_candidate" in
+            0|1|2) [ "$_candidate" -gt "$TIER" ] && TIER="$_candidate" ;;
+        esac
+    done
+fi
+
+# ─── Step 3: Load skills/agents from usage.json ─────────────────────────────
+USAGE="$SESSION_DIR/$SID.usage.json"
+if [[ -f "$USAGE" ]]; then
+    SKILLS_CSV="$(jq -r '.skills_used // [] | join(",")' "$USAGE" 2>/dev/null)"
+    AGENTS_CSV="$(jq -r '.agents_spawned // [] | join(",")' "$USAGE" 2>/dev/null)"
+else
+    SKILLS_CSV=""
+    AGENTS_CSV=""
+fi
+
+# ─── Step 4: Read VERSION ───────────────────────────────────────────────────
+VERSION_FILE="$INTELLISENSE_SETUP/VERSION"
+INTELLISENSE_VERSION="unknown"
+[[ -f "$VERSION_FILE" ]] && INTELLISENSE_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+
+# ─── Step 5: Token count from transcripts (cursor-based) ────────────────────
+CURSOR_FILE="$SESSION_DIR/$SID.token-cursor.json"
+COMMITTED_LAST_ID=""
+COMMITTED_TOKENS_PRE=0
+if [[ -f "$CURSOR_FILE" ]]; then
+    COMMITTED_LAST_ID="$(jq -r '.committed_cursor.last_processed_id // empty' "$CURSOR_FILE" 2>/dev/null)"
+    COMMITTED_TOKENS_PRE="$(jq -r '.committed_cursor.tokens_consumed_pre_cursor // 0' "$CURSOR_FILE" 2>/dev/null)"
+fi
+COMMITTED_TOKENS_PRE="${COMMITTED_TOKENS_PRE:-0}"
+
+# Find the transcript JSONL for this session. Claude Code stores transcripts at
+# ~/.claude/projects/<workspace-encoded>/<session_id>.jsonl
+# Workspace encoding: replace '/' with '-' in the cwd (Claude Code convention).
+TRANSCRIPT=""
+if [[ -d "$HOME/.claude/projects" ]]; then
+    # Try the most direct path first
+    for d in "$HOME/.claude/projects"/*/; do
+        candidate="${d}${SID}.jsonl"
+        if [[ -f "$candidate" ]]; then
+            TRANSCRIPT="$candidate"
+            break
+        fi
+    done
+fi
+
+# Sum tokens from messages with uuid > COMMITTED_LAST_ID.
+# Captures all 4 token fields: input, output, cache_creation, cache_read, so
+# cost on cached prompts and the cache-hit rate are both measurable.
+NEW_INPUT=0
+NEW_OUTPUT=0
+NEW_CACHE_CREATION=0
+NEW_CACHE_READ=0
+NEW_LAST_ID=""
+if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]]; then
+    TALLY="$(python3 - "$TRANSCRIPT" "$COMMITTED_LAST_ID" <<'PY' 2>/dev/null || true
+import json, sys
+path, last_id = sys.argv[1], sys.argv[2]
+past_cursor = (last_id == "")
+in_sum = out_sum = cc_sum = cr_sum = 0
+last_uuid = ""
+with open(path) as f:
+    for line in f:
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        if rec.get("type") != "assistant":
+            continue
+        u = rec.get("uuid", "")
+        if not past_cursor:
+            if u == last_id:
+                past_cursor = True
+            continue
+        usage = rec.get("message", {}).get("usage", {}) or {}
+        in_sum += int(usage.get("input_tokens", 0) or 0)
+        out_sum += int(usage.get("output_tokens", 0) or 0)
+        cc_sum += int(usage.get("cache_creation_input_tokens", 0) or 0)
+        cr_sum += int(usage.get("cache_read_input_tokens", 0) or 0)
+        last_uuid = u
+print(f"{in_sum} {out_sum} {cc_sum} {cr_sum} {last_uuid}")
+PY
+)"
+    if [[ -n "$TALLY" ]]; then
+        read -r NEW_INPUT NEW_OUTPUT NEW_CACHE_CREATION NEW_CACHE_READ NEW_LAST_ID <<< "$TALLY"
+        NEW_INPUT="${NEW_INPUT:-0}"
+        NEW_OUTPUT="${NEW_OUTPUT:-0}"
+        NEW_CACHE_CREATION="${NEW_CACHE_CREATION:-0}"
+        NEW_CACHE_READ="${NEW_CACHE_READ:-0}"
+    fi
+fi
+TOTAL=$((NEW_INPUT + NEW_OUTPUT + NEW_CACHE_CREATION + NEW_CACHE_READ))
+
+# ─── Step 6: Derive Intellisense-Rules-Expected from tier+mode ──────────────────────
+RULES_CSV=""
+CLASSIFIER_RULES="$INTELLISENSE_SETUP/scripts/classifier-rules.json"
+if [[ -f "$CLASSIFIER_RULES" && "$TIER" != "0" ]]; then
+    KEY="tier_${TIER}_${MODE}"
+    RULES_CSV="$(jq -r --arg k "$KEY" '.load_files_by_classification[$k] // [] | join(",")' "$CLASSIFIER_RULES" 2>/dev/null)"
+    # Fallback to tier_2_default if specific mode lookup is empty for Tier 2
+    if [[ -z "$RULES_CSV" && "$TIER" == "2" ]]; then
+        RULES_CSV="$(jq -r '.load_files_by_classification.tier_2_default // [] | join(",")' "$CLASSIFIER_RULES" 2>/dev/null)"
+    fi
+fi
+
+# ─── Step 6.5: Aggregate routing events ─────────
+# Reader for the writer in scripts/preToolUse-contract-gate.sh. Builds the
+# routing object embedded in the trailer when any escalation event has been
+# recorded for this session. Cumulative (session-to-date); escalations[] is
+# capped at the last 20 events to bound trailer size.
+#
+# Each escalations[] entry preserves event_id / ts / reason in addition to
+# the original {from_tier, to_tier, trigger, phase}. event_id is the stable
+# cross-channel dedup key: heartbeat aggregation and analytics ingestion
+# both dedup by (session, event_id) so that the same logical escalation
+# surfaced via writer→trailer and writer→heartbeat counts once, not twice.
+# The trailer always emits the field — empty string when the writer couldn't
+# compute a hash (no shasum/sha1sum on PATH).
+ROUTING_FILE="$SESSION_DIR/$SID.routing.jsonl"
+ROUTING_JSON=""
+if [[ -f "$ROUTING_FILE" ]] && command -v jq >/dev/null 2>&1; then
+    ROUTING_JSON="$(jq -sc '
+        [.[] | select(.kind == "escalation")] as $esc
+        | ($esc
+            | map({
+                event_id: (.event_id // ""),
+                ts: (.ts // ""),
+                from_tier,
+                to_tier,
+                trigger,
+                reason: (.reason // ""),
+                phase
+              })
+            | .[-20:]) as $tail
+        | (
+            (if ($esc | map(.to_tier // 0) | any(. == 2)) then ["tier_2"] else [] end) +
+            (if ($esc
+                  | map(select(.trigger == "path_pattern"
+                               and ((.reason // "")
+                                    | IN("auth/identity","financial","database migration",
+                                         "security rule","reasoning-integrity rule"))))
+                  | length > 0)
+              then ["high_risk_file"] else [] end) +
+            (if ($esc | map(select(.trigger == "policy_floor")) | length > 0)
+              then ["policy_floor"] else [] end)
+            | unique
+          ) as $promotions
+        | {model_per_phase: {}, promotions: $promotions, escalations: $tail}
+    ' "$ROUTING_FILE" 2>/dev/null)"
+    # Empty / parse-failure → omit cleanly rather than emit a misleading object.
+    if [[ -n "$ROUTING_JSON" ]]; then
+        nevents=$(echo "$ROUTING_JSON" | jq '.escalations | length' 2>/dev/null)
+        [[ "${nevents:-0}" == "0" ]] && ROUTING_JSON=""
+    fi
+fi
+
+# ─── Step 7: Build a single Intellisense-Metadata JSON trailer ─────────────────────
+# One JSON trailer: one parse for analytics, and new fields need no parser
+# change. The "v" field is the metadata-schema version — bump if shape changes.
+#
+# Tier 0 commits omit skills/rules_expected/agents (Tier 0 doesn't track
+# skill chains formally).
+SKILLS_JSON='[]'
+AGENTS_JSON='[]'
+RULES_JSON='[]'
+if [[ -n "$SKILLS_CSV" ]]; then
+    SKILLS_JSON="$(echo "$SKILLS_CSV" | jq -R 'split(",") | map(select(length > 0))')"
+fi
+if [[ -n "$AGENTS_CSV" ]]; then
+    AGENTS_JSON="$(echo "$AGENTS_CSV" | jq -R 'split(",") | map(select(length > 0))')"
+fi
+if [[ -n "$RULES_CSV" ]]; then
+    RULES_JSON="$(echo "$RULES_CSV" | jq -R 'split(",") | map(select(length > 0))')"
+fi
+
+# Build the JSON object. Tier 0 → omit skills/rules_expected/agents fields.
+if [[ "$TIER" == "0" ]]; then
+    INTELLISENSE_METADATA_JSON="$(jq -nc \
+        --argjson tier "$TIER" \
+        --arg mode "$MODE" \
+        --arg session "$SID" \
+        --arg version "$INTELLISENSE_VERSION" \
+        --argjson input "$NEW_INPUT" \
+        --argjson output "$NEW_OUTPUT" \
+        --argjson cache_creation "$NEW_CACHE_CREATION" \
+        --argjson cache_read "$NEW_CACHE_READ" \
+        --argjson total "$TOTAL" \
+        '{v:1, author_type:"claude_with_intellisense", commit_kind:"single",
+          stamping_source:"local_hook", classification_state:"ok",
+          tier:$tier, mode:$mode, session:$session, version:$version,
+          tokens:{input:$input, output:$output, cache_creation:$cache_creation,
+                  cache_read:$cache_read, total:$total}}')"
+else
+    INTELLISENSE_METADATA_JSON="$(jq -nc \
+        --argjson tier "$TIER" \
+        --arg mode "$MODE" \
+        --arg session "$SID" \
+        --arg version "$INTELLISENSE_VERSION" \
+        --argjson skills "$SKILLS_JSON" \
+        --argjson rules "$RULES_JSON" \
+        --argjson agents "$AGENTS_JSON" \
+        --argjson input "$NEW_INPUT" \
+        --argjson output "$NEW_OUTPUT" \
+        --argjson cache_creation "$NEW_CACHE_CREATION" \
+        --argjson cache_read "$NEW_CACHE_READ" \
+        --argjson total "$TOTAL" \
+        '{v:1, author_type:"claude_with_intellisense", commit_kind:"single",
+          stamping_source:"local_hook", classification_state:"ok",
+          tier:$tier, mode:$mode, session:$session, version:$version,
+          skills:$skills, rules_expected:$rules, agents:$agents,
+          tokens:{input:$input, output:$output, cache_creation:$cache_creation,
+                  cache_read:$cache_read, total:$total}}')"
+fi
+
+# Step 7.5: Add routing object — applies to both Tier 0 and
+# Tier 1/2 trailers when the session has recorded escalation events. Tier 0
+# sessions usually have no escalations (effective tier would have been raised
+# otherwise); the field is included when present for honest cross-session
+# session-state reporting.
+if [[ -n "$ROUTING_JSON" ]] && command -v jq >/dev/null 2>&1; then
+    INTELLISENSE_METADATA_JSON="$(printf '%s' "$INTELLISENSE_METADATA_JSON" \
+        | jq -c --argjson r "$ROUTING_JSON" '. + {routing: $r}' 2>/dev/null \
+        || printf '%s' "$INTELLISENSE_METADATA_JSON")"
+fi
+
+new_trailer_block() {
+    echo "Intellisense-Metadata: $INTELLISENSE_METADATA_JSON"
+}
+
+# ─── Step 8: Strip existing intellisense-managed trailers (for idempotency) ─────────
+# Strip an existing Intellisense-Metadata trailer so amend/re-commit does not
+# stack a second one.
+STRIP_REGEX="^Intellisense-Metadata:"
+
+# Read the existing commit message, strip intellisense trailers, append fresh block.
+TMP_MSG="$(mktemp)"
+grep -vE "$STRIP_REGEX" "$COMMIT_MSG_FILE" > "$TMP_MSG" 2>/dev/null || cp "$COMMIT_MSG_FILE" "$TMP_MSG"
+
+# Remove trailing blank lines (so our trailer block sits flush with content).
+# Use awk to drop trailing empties.
+awk 'BEGIN{empty=""} /^$/{empty=empty"\n"; next} {printf "%s%s\n", empty, $0; empty=""}' "$TMP_MSG" > "$TMP_MSG.trim"
+mv "$TMP_MSG.trim" "$TMP_MSG"
+
+# Ensure exactly one blank line before trailers (git convention).
+echo "" >> "$TMP_MSG"
+new_trailer_block >> "$TMP_MSG"
+
+# Atomic swap
+mv "$TMP_MSG" "$COMMIT_MSG_FILE"
+
+# ─── Step 9: Write pending_cursor for post-commit to verify ──────────────────────────
+# expected_token_payload stores the JSON tokens object that
+# we just injected, so post-commit can do a structural comparison against the final
+# committed message's parsed Intellisense-Metadata.tokens.
+NEXT_LAST_ID="${NEW_LAST_ID:-$COMMITTED_LAST_ID}"
+NEXT_TOKENS_TOTAL=$((COMMITTED_TOKENS_PRE + NEW_INPUT + NEW_OUTPUT + NEW_CACHE_CREATION + NEW_CACHE_READ))
+NONCE="$(uuidgen 2>/dev/null || python3 -c 'import uuid; print(uuid.uuid4())')"
+NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+EXPECTED_TOKEN_PAYLOAD="$(jq -nc \
+    --argjson input "$NEW_INPUT" \
+    --argjson output "$NEW_OUTPUT" \
+    --argjson cache_creation "$NEW_CACHE_CREATION" \
+    --argjson cache_read "$NEW_CACHE_READ" \
+    --argjson total "$TOTAL" \
+    '{input:$input, output:$output, cache_creation:$cache_creation, cache_read:$cache_read, total:$total}')"
+
+# Preserve any existing committed_cursor; just rewrite pending_cursor.
+EXISTING="{}"
+[[ -f "$CURSOR_FILE" ]] && EXISTING="$(cat "$CURSOR_FILE")"
+echo "$EXISTING" | jq \
+    --arg sid "$SID" \
+    --arg last_id "$NEXT_LAST_ID" \
+    --argjson tokens "$NEXT_TOKENS_TOTAL" \
+    --arg expected_session "$SID" \
+    --argjson expected_payload "$EXPECTED_TOKEN_PAYLOAD" \
+    --arg nonce "$NONCE" \
+    --arg prepared_at "$NOW_ISO" \
+    '.session_id = $sid
+     | .committed_cursor = (.committed_cursor // {last_processed_id: "", tokens_consumed_pre_cursor: 0})
+     | .pending_cursor = {
+         last_processed_id: $last_id,
+         tokens_consumed_pre_cursor: $tokens,
+         expected_session: $expected_session,
+         expected_token_payload: $expected_payload,
+         nonce: $nonce,
+         prepared_at: $prepared_at
+       }' > "$CURSOR_FILE.tmp" 2>/dev/null \
+    && mv "$CURSOR_FILE.tmp" "$CURSOR_FILE" || true
+
+exit 0

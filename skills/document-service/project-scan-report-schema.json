@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Document Service State File",
+  "description": "BMAD-adapted state persistence schema for /document-service skill. Tracks workflow progress, outputs generated, and resumability.",
+  "type": "object",
+  "required": ["workflow_version", "timestamps", "mode", "scan_level", "project_root", "completed_steps"],
+  "properties": {
+    "workflow_version": {
+      "type": "string",
+      "description": "Version of the /document-service workflow (e.g., '1.2.0')",
+      "example": "1.2.0"
+    },
+    "timestamps": {
+      "type": "object",
+      "required": ["started"],
+      "properties": {
+        "started": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when workflow started"
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last step completion"
+        },
+        "completed": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp when workflow completed (only set in step-08)"
+        }
+      }
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["initial_scan", "full_rescan", "deep_dive"],
+      "description": "Execution mode: initial_scan (all steps 1-8), full_rescan (all steps, overwrite docs), deep_dive (steps 1-6 only, skip user confirmations)"
+    },
+    "scan_level": {
+      "type": "string",
+      "enum": ["quick", "deep", "exhaustive"],
+      "description": "Scanning granularity: quick (pattern matching, no file reading), deep (critical dirs only), exhaustive (all files)"
+    },
+    "project_root": {
+      "type": "string",
+      "description": "Absolute path to the project being scanned (e.g., /Users/.../orders-service)"
+    },
+    "current_step": {
+      "type": "string",
+      "enum": ["step_1", "step_2", "step_3", "step_4", "step_5", "step_6", "step_7", "step_8", "complete"],
+      "description": "Current step pointer for resumability. Set to 'complete' when all steps done."
+    },
+    "next_step": {
+      "type": "string",
+      "enum": ["step_1", "step_2", "step_3", "step_4", "step_5", "step_6", "step_7", "step_8", null],
+      "description": "Next step to execute. Set to null when workflow complete."
+    },
+    "completed_steps": {
+      "type": "array",
+      "description": "Array of completed steps with metadata for resumability",
+      "items": {
+        "type": "object",
+        "required": ["step", "status", "timestamp"],
+        "properties": {
+          "step": {
+            "type": "string",
+            "description": "Step identifier (step_1 through step_8)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed", "failed", "skipped"],
+            "description": "Status of the step"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp when step completed"
+          },
+          "outputs": {
+            "type": "array",
+            "description": "Files written by this step",
+            "items": {
+              "type": "string"
+            },
+            "example": ["knowledge-base/01-system-source-tree.md"]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Brief summary of what the step did"
+          }
+        }
+      }
+    },
+    "outputs_generated": {
+      "type": "array",
+      "description": "Complete list of all documentation files generated across all steps",
+      "items": {
+        "type": "string"
+      },
+      "example": [
+        "knowledge-base/01-system-source-tree.md",
+        "knowledge-base/00-system-context.md",
+        "knowledge-base/02-api-contracts.md",
+        "knowledge-base/00-system-architecture.md"
+      ]
+    },
+    "drift_check_status": {
+      "type": "string",
+      "enum": ["PASSED", "FAILED", "NOT_RUN"],
+      "description": "Result of CLAUDE.md drift check (step-07). PASSED if no mismatches, FAILED if drift detected."
+    },
+    "drift_items_found": {
+      "type": "integer",
+      "description": "Number of drift items found (mismatches between scan and CLAUDE.md)"
+    },
+    "drift_report_generated": {
+      "type": ["string", "null"],
+      "description": "Path to drift report if generated (.intellisense-drift-report.md at repo root), null if no drift found"
+    },
+    "scan_results": {
+      "type": "object",
+      "description": "Cached scan results from steps 1-2 for resumability. Purged after file generation.",
+      "properties": {
+        "stack": {
+          "type": "object",
+          "properties": {
+            "primary_language": {
+              "type": "string",
+              "enum": ["go", "php", "angular"],
+              "description": "Detected primary language"
+            },
+            "framework_type": {
+              "type": "string",
+              "description": "Framework: GORM, Pop, Laravel, Angular, etc."
+            },
+            "database_type": {
+              "type": "string",
+              "description": "Database: PostgreSQL, MySQL, etc."
+            }
+          }
+        },
+        "directory_tree": {
+          "type": "object",
+          "description": "Directory structure with file counts per directory",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "file_counts": {
+          "type": "object",
+          "description": "Total counts: models, services, handlers, migrations, tests, etc.",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "detected_patterns": {
+          "type": "object",
+          "description": "Financial and architectural patterns detected",
+          "properties": {
+            "int64_cents": {
+              "type": "boolean",
+              "description": "Detected int64 minor-currency-units currency pattern"
+            },
+            "select_for_update": {
+              "type": "boolean",
+              "description": "Detected SELECT FOR UPDATE locking"
+            },
+            "idempotency_keys": {
+              "type": "boolean",
+              "description": "Detected idempotency key pattern (transaction_reference)"
+            },
+            "soft_deletes": {
+              "type": "boolean",
+              "description": "Detected deleted_at soft-delete pattern"
+            },
+            "billing_system_webhooks": {
+              "type": "boolean",
+              "description": "Detected the external billing system webhook handlers (PHP only)"
+            }
+          }
+        }
+      }
+    },
+    "context_data": {
+      "type": "object",
+      "description": "User-confirmed service metadata from step-04. Purged after project-context.md written.",
+      "properties": {
+        "service_name": {
+          "type": "string"
+        },
+        "owned_tables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "api_endpoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "categories_confirmed": {
+          "type": "array",
+          "description": "List of categories user confirmed in step-04",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "api_data": {
+      "type": "object",
+      "description": "Endpoint discoveries from step-05. Purged after api-contracts.md written.",
+      "properties": {
+        "endpoints_documented": {
+          "type": "integer",
+          "description": "Total number of endpoints found and documented"
+        },
+        "authentication_methods": {
+          "type": "array",
+          "description": "List of unique auth types found (Bearer, API key, Service-to-service, None)",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "resume_instructions": {
+      "type": "string",
+      "description": "Human-readable instructions for resuming or refreshing the workflow",
+      "example": "To resume from next step: /document-service --resume\nTo refresh docs without re-scanning: /document-service --update-only"
+    }
+  }
+}

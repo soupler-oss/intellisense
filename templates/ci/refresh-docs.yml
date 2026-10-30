@@ -1,0 +1,73 @@
+name: Refresh Service Documentation
+
+# Refresh auto-generated documentation weekly
+# Runs: Sunday 20:30 UTC
+# Command: /document-service --update-only (skips steps 1-6, fast refresh)
+# Action: If changes found, commit and push to main
+
+on:
+  schedule:
+    # Sunday 20:30 UTC (cron is always UTC)
+    - cron: '30 20 * * 0'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  refresh-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git config
+        run: |
+          git config user.name "Claude Code Bot"
+          git config user.email "claude-code@example.com"
+
+      - name: Detect stack from CLAUDE.md
+        id: detect
+        run: |
+          STACK=$(grep "^Stack:" CLAUDE.md | head -1 | awk '{print $NF}' | tr '[:upper:]' '[:lower:]')
+          if [ -z "$STACK" ]; then
+            echo "ERROR: Could not detect stack from CLAUDE.md"
+            exit 1
+          fi
+          echo "stack=$STACK" >> $GITHUB_OUTPUT
+          echo "Detected stack: $STACK"
+
+      - name: Run document-service --update-only
+        run: |
+          # This would invoke the /document-service skill with --update-only flag
+          # In practice, this runs within Claude Code environment or via shell wrapper
+          echo "Refreshing documentation for stack: ${{ steps.detect.outputs.stack }}"
+          # Placeholder: actual invocation depends on environment setup
+          # /document-service --repo $(pwd) --stack ${{ steps.detect.outputs.stack }} --update-only
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet knowledge-base/ .intellisense-docservice-state.json 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes detected."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected in knowledge-base/."
+            git diff --name-only
+          fi
+
+      - name: Commit and push if changed
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git add knowledge-base/ .intellisense-docservice-state.json
+          git commit -m "docs: auto-refresh service documentation (weekly)"
+          git push origin main
+
+      - name: Log result
+        run: |
+          if [ "${{ steps.changes.outputs.changed }}" = "true" ]; then
+            echo "✓ Documentation refreshed and committed"
+          else
+            echo "✓ Documentation is up-to-date (no changes)"
+          fi

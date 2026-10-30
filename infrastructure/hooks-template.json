@@ -1,0 +1,83 @@
+{
+  "_comment": "Hooks template for service repos. Copy relevant sections to your repo's .claude/settings.json. Remove all _comment fields before using.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_comment": "Build gate — catch compile errors immediately after Edit/Write. Choose ONE per repo (keep it fast — prefer compile/typecheck over full build): 'go vet ./... && go build ./...' for Go, 'mvn -q -o compile' (Maven) or './gradlew compileJava' (Gradle) for Java, 'php -l' for PHP, 'ruff check' (or 'mypy src/') for Python, 'npx tsc --noEmit' for Node/React (TypeScript), 'ng build --watch=false' for Angular, 'dart analyze' for Flutter. Prevents token waste on back-and-forth error fixes.",
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "go vet ./... && go build ./...",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "_comment": "Auto-update code graph after every file edit. Requires code-review-graph MCP server to be configured. Install: see infrastructure/README.md.",
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph update --skip-flows",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "_comment": "Notify Slack on git commit. Requires slack-commit-notify.sh in your repo's .claude/hooks/. Runs async — does not block Claude.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/slack-commit-notify.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "_comment": "Flutter: auto-format a Dart file right after Edit/Write, so the formatted result is what Claude reads next. Requires flutter-format-on-save.sh in ~/.claude/hooks/ (copy from hook-packs/flutter/). Skips generated files; no-op on non-Flutter repos.",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/flutter-format-on-save.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "_comment": "Print code graph status at session start. Helps verify the graph is up to date.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph status"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "_comment": "Warn when session is approaching the token limit (150K). Fires once per session. Requires token-warn.sh in ~/.claude/hooks/.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/token-warn.sh"
+          }
+        ]
+      },
+      {
+        "_comment": "Flutter: run `dart analyze lib/` at session end so analyzer errors surface before the session closes. Uses flutter-analyze-session.sh (copy from hook-packs/flutter/ to ~/.claude/hooks/) which self-gates on pubspec.yaml + lib/ + dart-on-PATH — no-op on non-Flutter repos and non-Dart machines, so safe to leave enabled across stacks.",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/flutter-analyze-session.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

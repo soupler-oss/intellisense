@@ -1,0 +1,60 @@
+name: Release
+
+# When the maintainer publishes a GitHub release for tag vX.Y.Z, build the CLI for every platform and
+# attach the archives and their checksums to it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: Release binaries
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tag matches VERSION
+        run: |
+          [ "$TAG" = "v$(cat VERSION)" ] || { echo "::error::tag $TAG does not match VERSION $(cat VERSION)"; exit 1; }
+      - run: go test -count=1 ./...
+      - name: Build
+        run: bash scripts/release/build.sh "$TAG" dist
+      - name: Homebrew formula, Scoop and winget manifests
+        run: bash scripts/release/packaging.sh "$TAG" dist
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt dist/intellisense.rb dist/intellisense.json dist/winget/*.yaml --clobber
+      # Publishing to the tap and the bucket needs a token with write access to those repositories. Without
+      # one, the formula and manifest are still attached to the release for a maintainer to copy.
+      - name: Update the Homebrew tap
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        if: env.TOKEN != ''
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/soupler-oss/homebrew-tap.git" tap
+          mkdir -p tap/Formula && cp dist/intellisense.rb tap/Formula/intellisense.rb
+          cd tap
+          git config user.name "intellisense release" && git config user.email "release@soupler.invalid"
+          git add Formula/intellisense.rb
+          git diff --cached --quiet || { git commit -m "intellisense ${TAG#v}" && git push; }
+      - name: Update the Scoop bucket
+        env:
+          TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+        if: env.TOKEN != ''
+        run: |
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/soupler-oss/scoop-bucket.git" bucket
+          mkdir -p bucket/bucket && cp dist/intellisense.json bucket/bucket/intellisense.json
+          cd bucket
+          git config user.name "intellisense release" && git config user.email "release@soupler.invalid"
+          git add bucket/intellisense.json
+          git diff --cached --quiet || { git commit -m "intellisense ${TAG#v}" && git push; }

@@ -1,0 +1,83 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bd prime)",
+      "Bash(bd ready)",
+      "Bash(bd show *)",
+      "Bash(bd create *)",
+      "Bash(bd update *)",
+      "Bash(bd close *)"
+    ],
+    "additionalDirectories": [
+      "${HOME}/.intellisense"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bd prime"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${INTELLISENSE_SETUP_PATH}/scripts/userpromptsubmit-tdd-rules.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ${INTELLISENSE_SETUP_PATH}/scripts/userPromptSubmit-classifier.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${INTELLISENSE_SETUP_PATH}/scripts/preToolUse-contract-gate.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${INTELLISENSE_SETUP_PATH}/scripts/postToolUse-usage-tracker.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "intellisense": {
+    "gate_mode": "pilot",
+    "graph_enforcement": "warn",
+    "audit_chain_enforcement": "enforced",
+    "sync_enforcement": "warn",
+    "sync_enforce_on_inferred": false,
+    "sync_pr_lookup_in_prepush": false,
+    "sync_recheck_ttl_minutes": {
+      "fresh": 240,
+      "declined": 240,
+      "warned_behind": 60,
+      "fail_open": 20
+    },
+    "config_version": 1
+  }
+}

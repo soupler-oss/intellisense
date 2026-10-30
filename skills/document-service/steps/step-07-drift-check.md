@@ -1,0 +1,299 @@
+# Step 7: Drift Check — Compare Scan Results vs CLAUDE.md
+
+**Goal**: Compare discovered service structure against CLAUDE.md to identify drift (missing files, undocumented tables, API mismatches).
+
+**Input**: `repo_path`, all scan results from steps 1-6
+
+**Output**:
+- `.intellisense-drift-report.md` (on-demand output, only if drift found)
+- Update state.json with drift_check_status and step_completed: 7
+
+---
+
+## Execution
+
+### 1. Read CLAUDE.md
+
+Read CLAUDE.md in repo root. Extract all 5 sections:
+
+- **Stack**: Expected stack (go/php/angular), framework version
+- **Architecture**: Expected service pattern (layers, shared concerns)
+- **Shared Tables**: Expected table names and field types
+- **API Contracts**: Expected endpoints and consumers
+- **Domain Terms**: Mapping of business terms to code locations
+
+### 2. Compare Stack Section
+
+**Detected** (from step-01) vs. **CLAUDE.md**:
+
+| Aspect | Detected | CLAUDE.md | Match? |
+|--------|----------|-----------|--------|
+| Language | go | go | ✓ |
+| Framework | GORM | GORM | ✓ |
+| ORM version | 1.24.x | 1.20+ | ⚠️ Newer than expected |
+| Database | PostgreSQL | PostgreSQL | ✓ |
+
+**Report discrepancy** if any mismatch.
+
+### 3. Compare Shared Tables Section
+
+**Detected** (from step-02 scan) vs. **CLAUDE.md**:
+
+Detected tables from migrations/:
+```
+payouts, journal_entries, payout_items, payout_reconciliation
+```
+
+CLAUDE.md Shared Tables section lists:
+```
+payouts, journal_entries, payout_items
+```
+
+**Drift found**: `payout_reconciliation` table detected but not documented in CLAUDE.md.
+
+**Report**:
+```
+❌ Table Mismatch
+- Payout_reconciliation: Detected in migrations/ but NOT in CLAUDE.md Shared Tables
+  Location: migrations/2026-04-15_create_payout_reconciliation.sql
+  Issue: May indicate undocumented feature or schema drift
+  Action: Update CLAUDE.md Shared Tables section
+```
+
+### 4. Compare API Contracts Section
+
+**Detected** (from step-05 scan) vs. **CLAUDE.md**:
+
+Detected endpoints:
+```
+GET /api/payouts, POST /api/payouts, GET /api/payouts/:id, PUT /api/payouts/:id/finalize, DELETE /api/payouts/:id, ...
+```
+
+CLAUDE.md API Contracts lists:
+```
+GET /api/payouts, POST /api/payouts, GET /api/payouts/:id
+```
+
+**Drift found**: `PUT /api/payouts/:id/finalize` and `DELETE /api/payouts/:id` detected but not documented.
+
+**Report**:
+```
+⚠️ Endpoint Mismatch
+- PUT /api/payouts/:id/finalize: Detected in handlers/payout.go but NOT in CLAUDE.md
+  Location: handlers/payout.go:145
+  Consumers: Payout Cycle service (inferred from code)
+  Issue: CLAUDE.md is incomplete
+  Action: Add endpoint to API Contracts section
+
+- DELETE /api/payouts/:id: Detected in handlers/payout.go but NOT in CLAUDE.md
+  Location: handlers/payout.go:165
+  Type: Soft-delete (sets deleted_at)
+  Issue: CLAUDE.md is incomplete
+  Action: Add endpoint to API Contracts section
+```
+
+### 5. Compare Domain Terms Section
+
+**Detected** (from code comments, variable names) vs. **CLAUDE.md**:
+
+CLAUDE.md Domain Terms might list:
+```
+- Payout: payouts table, PayoutService
+- Journal Entry: journal_entries table
+- Idempotency: transaction_reference field
+```
+
+**Check for missing or incorrect mappings**:
+
+```
+✓ Payout → payouts table, PayoutService — CORRECT
+✓ Journal Entry → journal_entries table — CORRECT
+❌ Soft Delete: NOT in Domain Terms but detected in code
+  Field: deleted_at on all financial tables
+  Pattern: Used in all queries (WHERE deleted_at IS NULL)
+  Action: Add to Domain Terms or Architecture section
+```
+
+### 6. Check for File Existence Issues
+
+Scan for expected files that don't exist:
+
+**Go repos** — Expected patterns:
+- models/ → Should exist (found: 5 files) ✓
+- services/ → Should exist (found: 4 files) ✓
+- handlers/ → Should exist (found: 6 files) ✓
+- migrations/ → Should exist (found: 12 files) ✓
+
+**If expected directory missing**:
+```
+❌ Missing Directory
+- Directory: handlers/
+  Expected: CLAUDE.md Architecture lists "handlers layer"
+  Actual: handlers/ directory not found
+  Note: May be named "actions/" (Buffalo) or "controllers/" (MVC)
+  Action: Verify CLAUDE.md Architecture description matches actual structure
+```
+
+### 7. Flag Financial Pattern Discrepancies
+
+Compare financial_patterns from step-02 against CLAUDE.md Financial Rules section:
+
+**Detected patterns** vs. **CLAUDE.md expectations**:
+
+```
+✓ int64 minor-currency-units: Detected AND documented in CLAUDE.md — CORRECT
+✓ Idempotency: Detected AND documented — CORRECT
+✓ Soft-delete: Detected AND mentioned in Financial Rules — CORRECT
+⚠️ SELECT FOR UPDATE: Detected in migrations but CLAUDE.md doesn't explain it
+  Location: migrations/2026-04-21_payouts.sql:42
+  Impact: Critical for concurrent balance updates
+  Action: Add to Architecture or Financial Rules section
+```
+
+### 8. Load Drift Report Template
+
+If ANY drift found, format comprehensive report:
+
+```markdown
+# CLAUDE.md Drift Report: orders-service
+
+Generated by `/document-service` on [timestamp]
+Scan Summary: 4 drift items found
+
+---
+
+## Summary
+
+| Category | Status | Count | Severity |
+|----------|--------|-------|----------|
+| Stack Mismatch | ✓ Pass | — | — |
+| Missing Tables | ❌ Fail | 1 | MEDIUM |
+| Missing Endpoints | ❌ Fail | 2 | MEDIUM |
+| Missing Domain Terms | ⚠️ Warning | 1 | LOW |
+| Missing Directory | ✓ Pass | — | — |
+
+---
+
+## Detailed Findings
+
+### 1. ❌ Missing Table: payout_reconciliation
+- **Detected**: migrations/2026-04-21_create_payout_reconciliation.sql
+- **Expected in CLAUDE.md**: Shared Tables section
+- **Actual in CLAUDE.md**: Not listed
+- **Severity**: MEDIUM — Feature exists but not documented
+- **Fix**: Add entry to CLAUDE.md Shared Tables section
+  ```
+  - `payout_reconciliation`: id, payout_id (fk), actual_amount (int64), expected_amount (int64), status
+  ```
+
+### 2. ❌ Missing Endpoint: PUT /api/payouts/:id/finalize
+- **Detected**: handlers/payout.go:145
+- **Expected in CLAUDE.md**: API Contracts section
+- **Actual in CLAUDE.md**: Not listed
+- **Severity**: MEDIUM — API exists but not documented
+- **Consumers**: Payout Cycle service (inferred from imports)
+- **Fix**: Add to CLAUDE.md API Contracts section
+  ```
+  - `PUT /api/payouts/:id/finalize`: Finalize payout, trigger journal updates
+  ```
+
+### 3. ❌ Missing Endpoint: DELETE /api/payouts/:id
+- **Detected**: handlers/payout.go:165
+- **Expected in CLAUDE.md**: API Contracts section
+- **Actual in CLAUDE.md**: Not listed
+- **Severity**: MEDIUM — API exists but not documented
+- **Type**: Soft-delete (sets deleted_at, does not remove from DB)
+- **Fix**: Add to CLAUDE.md API Contracts section
+  ```
+  - `DELETE /api/payouts/:id`: Soft-delete payout (sets deleted_at)
+  ```
+
+### 4. ⚠️ Missing Domain Term: Soft Delete
+- **Detected**: deleted_at columns on all financial tables, WHERE deleted_at IS NULL pattern throughout code
+- **Expected in CLAUDE.md**: Domain Terms section
+- **Actual in CLAUDE.md**: Not mentioned (only described vaguely in Financial Rules)
+- **Severity**: LOW — Pattern is documented but not explicitly defined
+- **Fix**: Add to CLAUDE.md Domain Terms section
+  ```
+  - Soft Delete: deleted_at timestamp on financial records. Queries use WHERE deleted_at IS NULL. Enables audit trail without hard-delete.
+  ```
+
+---
+
+## Drift Severity Legend
+
+- **CRITICAL** (⛔): Core component missing (e.g., service name, primary table, main API endpoint)
+- **MEDIUM** (❌): Non-core feature undocumented (new endpoint, new table, new library)
+- **LOW** (⚠️): Implementation detail not fully documented (pattern explanation, domain term)
+- **INFO** (ℹ️): No action needed (newer version than expected, internal improvement)
+
+---
+
+## Recommended Action Plan
+
+1. **Immediate** (before next deployment):
+   - [ ] Add payout_reconciliation table to CLAUDE.md Shared Tables
+   - [ ] Add missing endpoints to CLAUDE.md API Contracts
+
+2. **Before Release** (within 1 week):
+   - [ ] Add Soft Delete domain term to CLAUDE.md Domain Terms
+   - [ ] Review and update all outdated sections
+
+3. **Ongoing**:
+   - [ ] Run `/document-service --update-only` weekly to detect drift
+   - [ ] Assign owner to keep CLAUDE.md in sync
+```
+
+### 9. Update State File
+
+```json
+{
+  "step_completed": 7,
+  "next_step": 8,
+  "outputs_generated": [
+    "knowledge-base/01-system-source-tree.md",
+    "knowledge-base/00-system-context.md",
+    "knowledge-base/02-api-contracts.md",
+    "knowledge-base/00-system-architecture.md"
+  ],
+  "drift_check_status": "FAILED",
+  "drift_items_found": 4,
+  "drift_severity": ["MEDIUM", "MEDIUM", "MEDIUM", "LOW"],
+  "drift_report_generated": ".intellisense-drift-report.md",
+  "completed_steps": [
+    {"step": "step_7", "status": "completed", "timestamp": "2026-04-21T10:55:00Z",
+     "outputs": [".intellisense-drift-report.md"],
+     "summary": "Drift check completed: 4 items found (2 missing endpoints, 1 missing table, 1 missing domain term)"}
+  ]
+}
+```
+
+If NO drift found:
+```json
+{
+  "step_completed": 7,
+  "next_step": 8,
+  "drift_check_status": "PASSED",
+  "drift_items_found": 0,
+  "drift_report_generated": null,
+  "completed_steps": [
+    {"step": "step_7", "status": "completed", "timestamp": "2026-04-21T10:55:00Z",
+     "outputs": [],
+     "summary": "Drift check completed: 0 items found. CLAUDE.md is in sync with codebase."}
+  ]
+}
+```
+
+### 10. Success Criteria
+
+- ✓ State file updated with drift_check_status (PASSED or FAILED)
+- ✓ If drift found: `.intellisense-drift-report.md` written with all findings
+- ✓ If no drift: No report file created, state.json reflects "PASSED"
+- ✓ Report includes: Category, Severity, Location, Fix recommendation
+- ✓ State file ready for next step (step-08)
+
+---
+
+## Next Step
+
+Proceed to step-08-complete.md once state file shows `step_completed: 7`.

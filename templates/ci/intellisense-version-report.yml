@@ -1,0 +1,134 @@
+name: intellisense Version Report
+
+# Deployed to every service repo via setup-repos.sh
+# Scans PR commits for Intellisense-Version footer and labels the PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  intellisense-version-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan commits for Intellisense-Version footer
+        id: scan
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+
+          # Extract all Intellisense-Version values from commit messages in this PR
+          VERSIONS=$(git log "${BASE}..${HEAD}" --format="%B" \
+            | grep -oP 'Intellisense-Version:\s*\K[0-9]+\.[0-9]+\.[0-9]+' \
+            | sort -u)
+
+          if [ -z "$VERSIONS" ]; then
+            echo "intellisense_used=false" >> "$GITHUB_OUTPUT"
+            echo "intellisense_version=" >> "$GITHUB_OUTPUT"
+          else
+            # Use the highest version found (in case multiple commits differ)
+            LATEST=$(echo "$VERSIONS" | sort -V | tail -1)
+            echo "intellisense_used=true" >> "$GITHUB_OUTPUT"
+            echo "intellisense_version=$LATEST" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get current intellisense version from source
+        id: current
+        run: |
+          CURRENT=$(curl -sf \
+            "https://raw.githubusercontent.com/${{ github.repository_owner }}/intellisense/main/VERSION" \
+            | tr -d '[:space:]' || echo "unknown")
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Label PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const intellisenseUsed = '${{ steps.scan.outputs.intellisense_used }}' === 'true';
+            const prVersion = '${{ steps.scan.outputs.intellisense_version }}';
+            const currentVersion = '${{ steps.current.outputs.version }}';
+            const prNumber = context.payload.pull_request.number;
+
+            // Remove stale intellisense labels before adding fresh ones
+            const existing = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            for (const label of existing.data) {
+              if (label.name.startsWith('intellisense:') || label.name === 'no-intellisense') {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: label.name,
+                }).catch(() => {});
+              }
+            }
+
+            if (!intellisenseUsed) {
+              // Ensure label exists then apply
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'no-intellisense',
+                color: 'cccccc',
+                description: 'PR commits have no Intellisense-Version footer',
+              }).catch(() => {});
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['no-intellisense'],
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: '> **intellisense**: No `Intellisense-Version` footer found in any commit. This PR was not made with Claude Code + intellisense.',
+              });
+              return;
+            }
+
+            const labelName = `intellisense: ${prVersion}`;
+            const isOutdated = currentVersion !== 'unknown' && prVersion !== currentVersion;
+
+            await github.rest.issues.createLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: labelName,
+              color: isOutdated ? 'fbca04' : '0075ca',
+              description: `PR made with intellisense version ${prVersion}`,
+            }).catch(() => {});
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: [labelName],
+            });
+
+            let comment = `> **intellisense version**: \`${prVersion}\``;
+            if (isOutdated) {
+              comment += `\n> :warning: Outdated — current intellisense is \`${currentVersion}\`. Run \`bash scripts/intellisense-update.sh\` before your next PR.`;
+            } else {
+              comment += ` ✓ current`;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment,
+            });

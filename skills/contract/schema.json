@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/soupler-oss/intellisense/skills/contract/schema.json",
+  "title": "intellisense Change Contract",
+  "description": "Schema for the front matter of .intellisense/contracts/<branch>.md — the branch's change contract, committed with the change, validated by scripts/validate-contract-schema.sh and enforced by hooks/pre-push (Tier 1+) and scripts/preToolUse-contract-gate.sh (Phase 1+ runtime gate).",
+  "type": "object",
+
+  "required": [
+    "branch",
+    "mode",
+    "requirement",
+    "files_affected",
+    "estimated_lines",
+    "confidence_score",
+    "risk_level",
+    "financial_impact",
+    "high_risk_files_touched",
+    "protected_files_touched",
+    "rollback_strategy",
+    "test_strategy",
+    "session_id",
+    "prompt_hash",
+    "classification_id",
+    "state"
+  ],
+
+  "properties": {
+    "branch": {
+      "type": "string",
+      "description": "Output of `git symbolic-ref --short HEAD`. Validator rejects if it differs from the current branch (stale-contract check)."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["full_feature", "bug_fix", "refactor", "hotfix", "pr_review", "qa", "design_review_only", "fix_pr_comments"],
+      "description": "Detected mode from Phase 0.5 (or classifier output for the same)."
+    },
+    "requirement": {
+      "type": "string",
+      "description": "One-sentence restatement of what the user asked for."
+    },
+    "files_affected": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Flat array of repo-relative paths the change will touch. Must NOT be nested under a `scope` object."
+    },
+    "estimated_lines": {
+      "type": "number",
+      "description": "Numeric estimate of total lines changed (additions + deletions)."
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Decimal 0.0-1.0. Gate Rule R3 rejects contracts with confidence_score < 0.75."
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Gate Rule R1: low is rejected when high_risk_files_touched is non-empty."
+    },
+    "financial_impact": {
+      "type": "boolean",
+      "description": "True when the change affects payment, account, payout, invoice, tax, or other money-typed paths. Gate Rule R5: true requires mode=full_feature (auto-escalation if classifier sees financial+bug_fix)."
+    },
+    "high_risk_files_touched": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files listed in knowledge-base/risk-register.md OR files the developer has marked as load-bearing infrastructure. Each entry should be `<path> — <why it's risky>`."
+    },
+    "protected_files_touched": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Migrations, config files, vendor/* files, .env files. Gate Rule R2: non-empty array requires approval_received_at to be set."
+    },
+    "rollback_strategy": {
+      "type": "string",
+      "description": "Exact steps to undo. 'Revert commit' is acceptable when no data migrations exist."
+    },
+    "test_strategy": {
+      "type": "string",
+      "description": "What tests will be written or modified, and why those tests verify the change."
+    },
+
+    "approval_received_at": {
+      "type": "string",
+      "description": "ISO timestamp when protected_files_touched is non-empty (Gate Rule R2). Empty string otherwise. Conditionally required by validator."
+    },
+
+    "session_id": {
+      "type": "string",
+      "description": "Claude Code session_id captured when /contract produced this artifact. Together with `prompt_hash` and `classification_id`, this binds the contract to a specific TASK rather than to a branch. Without task binding, an old contract from yesterday's work on the same branch could silently validate today's unrelated edits."
+    },
+
+    "prompt_hash": {
+      "type": "string",
+      "description": "SHA-256 prefix of the user prompt that produced the current classification, captured at /contract creation time. Pairs with `classification_id` to detect task drift. Stable across re-runs of /contract on the same prompt; changes on a new prompt."
+    },
+
+    "classification_id": {
+      "type": "string",
+      "description": "Identifier of the classification used to scope this contract — written by the classifier into .intellisense/session/<session_id>.classification.json. PreToolUse gate compares this to the CURRENT classification at edit time; mismatch = wrong task (Gate Rule R7). Pilot warns on mismatch; enforced blocks."
+    },
+
+    "state": {
+      "type": "string",
+      "enum": ["draft", "presented", "approved", "active", "retroactive", "evidence_only"],
+      "description": "Contract lifecycle state (audit-chain hardening 2026-05-20). draft → /contract just produced the file. presented → Claude has shown the contract to the user. approved → user explicitly said proceed; first valid edit is now permitted. active → at least one edit under this contract has succeeded. retroactive / evidence_only → reviewer-evidence artifacts produced post-hoc (audit, triage, after-the-fact reconstruction); they validate schema-clean but never unlock edits. Gate Rule R6 is context-aware: R6 (edit, PreToolUse default) requires state ∈ {approved, active}; R6 (evidence, pre-push) additionally accepts {retroactive, evidence_only}. draft and presented are rejected in both contexts. The gate auto-transitions approved → active on the first successful Edit/Write."
+    },
+
+    "evidence_used": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Documentation-only field: how the affected-files list was derived (grep results, git log findings, etc.). Not enforced by validator; useful for human review."
+    },
+    "knowledge_base_files_read": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Documentation-only field: which repo docs were consulted before scoping the change."
+    },
+    "repo_patterns_checked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Documentation-only field: coding patterns the implementation will follow (e.g., 'parameterized SQL', 'error wrapping')."
+    },
+    "why_scope_is_limited": {
+      "type": "string",
+      "description": "Documentation-only field: one sentence justifying why the scope can't be reduced further."
+    },
+
+    "impact_analysis": {
+      "type": "string",
+      "description": "Documentation-only field (Impact Discovery). Caller/downstream evidence gathered during /plan Impact Discovery — captures graph who-calls + change-spread output, or rg fallback output, or the literal string 'n/a — graph unavailable' / 'n/a — weak stack'. Validator emits a warn-only message at push time when Tier 1/2 contract has this field empty/missing."
+    },
+
+    "impact_analysis_dismissed_suggestions": {
+      "type": "string",
+      "description": "Documentation-only field (Impact Discovery). Free-text reason when developer marks a graph-suggested caller as `dismissed` or `verified_unchanged`. One line per suggestion: '<file>: <reason>'."
+    }
+  }
+}

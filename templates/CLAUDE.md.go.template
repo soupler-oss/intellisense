@@ -1,0 +1,218 @@
+# CLAUDE.md — {{SERVICE_NAME}}
+
+## Service Identity
+
+- **Service**: {{SERVICE_NAME}}
+- **Purpose**: [1-2 sentences describing what this service does and for whom]
+- **Stack**: Go {{STACK_VERSION}} with [GORM|Buffalo/Pop] ORM
+- **Team**: [Owner team]
+- **Deploy Before**: [service-name] (reason: [why]) | NONE
+- **Deploy After**: [service-name] (reason: [why]) | NONE
+
+## intellisense Rule Pointers
+
+All execution protocol, security rules, and language patterns are governed by intellisense global rules.
+This file does NOT restate them.
+
+**Always loaded** (via symlink, no action needed):
+- `~/.claude/rules/baseline/security.md` — Security checks, PII rules, pre-commit checklist
+- `~/.intellisense/rules/operational/development-workflow.md` — Mode detection, Phase 0–1
+
+**Loaded when coding (Phase 2+ only)**:
+- `~/.intellisense/rules/operational/development-workflow-impl.md` — Phases 2–6, gates, TDD, commits, PRs
+- `~/.intellisense/rules/language-specific/go-patterns.md` — Naming, error handling, concurrency, ORM patterns
+
+> This file does not describe phases, gates, approval flows, naming conventions, commit format,
+> TDD instructions, or security rules. Those live in the files above and apply automatically.
+
+## Knowledge Base Navigation
+
+**Auto-loaded every session** (no action needed):
+# Files are loaded by Claude in 00→05 priority order
+- `@knowledge-base/00-system-context.md` — Stack, owned tables, key dependencies, service metadata
+
+**Read when the current task requires it** (Phase 2+ only, not at session start):
+
+| Task Involves | Read This KB File |
+|---|---|
+| System architecture, component diagram, data flow | `knowledge-base/00-system-architecture.md` |
+| Technology stack, dependency versions | `knowledge-base/01-system-tech-stack.md` |
+| Directory structure, layer descriptions | `knowledge-base/01-system-source-tree.md` |
+| HTTP endpoints, API schemas, auth, consumers | `knowledge-base/02-api-contracts.md` |
+| DB tables, schema, indexes, migrations | `knowledge-base/02-data-models.md` |
+| Business rules, domain constraints, access control | `knowledge-base/03-biz-domain-rules.md` |
+| Mission-critical user journeys, core workflows | `knowledge-base/03-biz-critical-flows.md` |
+| Non-obvious production issues, past incidents | `knowledge-base/04-eng-gotchas.md` |
+| Naming conventions, error handling style, PR checklist | `knowledge-base/04-eng-conventions.md` |
+| Test strategy, test DB setup, CI gates | `knowledge-base/04-eng-testing-guide.md` |
+| Feature changelog, recent significant changes | `knowledge-base/05-meta-changelog.md` |
+
+**Loading rule**: Do not read KB files at session start. Read only when the task explicitly
+requires that topic. State which file you are reading and why before opening it.
+
+**If a KB file is an empty stub**: Do not load it. Note it is unpopulated and proceed with
+code-level analysis. Routing to empty stubs adds noise, not context.
+
+## Response Style
+
+[Specify preferences. Example: "≤150 words per response. No trailing summaries. No tradeoff
+discussion unless asked. Expand only on follow-up."]
+
+## Service Architecture
+
+[3–5 sentences describing the service design. Example:]
+
+```
+Handles transaction processing and order fulfillment for the billing domain.
+Reads user profiles from auth-service; emits payout events to reporting-service.
+All database access via GORM with explicit transaction support.
+Financial operations require SELECT FOR UPDATE on balance mutations.
+```
+
+## Risk Escalation Files
+
+Modifying any file in this table automatically escalates `risk_level` to HIGH and requires
+the full agent pipeline, regardless of estimated scope.
+
+| File | Size | Why High Risk |
+|---|---|---|
+| [TODO: path/to/service.go] | [XX KB] | [Reason: e.g., core financial logic, shared by all callers] |
+| [TODO: path/to/handler.go] | [XX KB] | [Reason: e.g., all API entry points route through here] |
+
+## Structural Map
+
+Key files Claude reads first:
+- `handlers/[main].go` — HTTP entry point, request parsing, auth, routing
+- `services/[main].go` — Business logic and orchestration (no DB calls here)
+- `repository/[main].go` — All database access via GORM
+- `models/[main].go` — Struct definitions, no logic
+
+Layers and their purpose:
+- `handlers/` → Parse request, validate, route to service (≤50 lines each)
+- `services/` → Business logic, orchestration across repos (no direct DB queries)
+- `repository/` → All database access via GORM; single DB concern per file
+- `models/` → Struct definitions only; no logic, no DB calls
+- `middleware/` → Cross-cutting concerns: auth, logging, rate limiting
+- `tests/` → Unit tests alongside source (`*_test.go`)
+- `cmd/` → Main entry point and wiring
+
+## Upstream Dependencies
+
+Services this repo depends on (and why):
+- `[service-name]`: [what data or capability this repo consumes from it]
+
+## Downstream Consumers
+
+Services that depend on this repo (and what they consume):
+- `[service-name]`: [which endpoint or event they consume]
+
+## Shared Database Tables
+
+Tables written by this service AND at least one other service (2+ writers only):
+- `[table]`: also written by `[service-name, service-name]`
+
+Do NOT list tables only read by this service.
+
+## API Contracts
+
+Endpoints consumed by OTHER services (not internal routes, not frontend-only):
+- `[METHOD /path/vN]`: consumed by `[service]` — [brief description]
+
+## Domain Terms
+
+Service-specific terms that mean something different here than in other services:
+- `[Term]`: [Definition specific to this service]
+
+## Financial Rules
+
+Business rules governing money handling (fill if this service touches financial data):
+- `[Rule]`: [Why it matters — what goes wrong without it]
+
+Example:
+```
+- All amounts stored as int64 (smallest currency unit): Prevents float rounding errors
+- SELECT FOR UPDATE on balance mutations: Prevents race conditions under concurrent load
+- Idempotency keys required on all state-changing ops: Safe retry semantics
+- Soft-delete only (no hard deletes): Maintains audit trail for compliance
+```
+
+## Escalation Triggers
+
+Repo-specific high-risk patterns. Encountering any of these during a task escalates the
+Change Contract `risk_level` by one tier and requires explicit user confirmation before proceeding:
+
+- **Goroutine leak risk**: Do not block on unbuffered channels inside shared service methods —
+  use `context.WithTimeout` and check `ctx.Done()`
+- **Shared library modification**: Changes affect ALL downstream consumers; run `/discover-impact`
+  before modifying any shared package
+- **SELECT FOR UPDATE missing**: Any mutation to a balance or financial aggregate without
+  `SELECT FOR UPDATE` is a race condition — escalate automatically
+- **ORM mixing**: Do not introduce a second ORM pattern; this repo uses [GORM|Pop] only
+- [TODO: add repo-specific escalation triggers here]
+
+## Run / Test / Build
+
+```bash
+# Run locally
+go run cmd/main.go
+
+# Run all tests
+go test ./... -v
+
+# Build binary
+go build -o bin/[service-name] cmd/main.go
+
+# Lint
+golangci-lint run
+
+# Check for worktree correctness after git worktree add
+go build ./...
+```
+
+## MCP Tools
+
+This repo's stack classification (mandatory-supported / candidate-supported / weak / unsupported) is the authoritative source for whether `code-review-graph` is required, advisory, or best-effort here. Read it once from `rules/operational/graph-supported-stacks.md` (single source of truth) — do not infer the policy from this template, which only applies as an example baseline.
+
+If this stack is currently classified mandatory-supported, `setup.sh` and `setup-repos.sh` hard-fail when the graph cannot be installed/built and this section MUST NOT be deleted. If classified weak or candidate, the graph runs best-effort and any output is auto-prefixed `[INTELLISENSE-WEAK-STACK: <stack> — <reason>]`.
+
+When the graph is available, prefer it over Grep/Read for these engineering questions (defined in `rules/operational/intelligence-sources.md` — refer to that file for the current set):
+- `change-spread`, `who-calls`, `what-changed-and-where-does-it-spread`
+
+Fall back to Grep/Read for raw text/regex search or when the graph does not cover the query.
+
+## Task Tracking
+
+Every Tier 1+ commit carries its own task reference, with a key from `evidence.task_trailers` in `.intellisense.yml`
+(`Task: PROJ-12`, `Refs: #123`, or `Beads: <id>` when the team tracks work in Beads); the change also carries one
+change contract. The pre-push hook and CI block a Tier 1+ push without them. Run `intellisense classify` to see a
+change's tier.
+
+Tier 0 (docs, tests, comment-only edits) needs neither. Anything touching API/DB/auth/financial/migration/cross-service
+is Tier 1+; the policy's path rules decide.
+
+## Forbidden Content
+
+The following must NEVER appear in this file. If found during a review, delete it and move to
+the correct location:
+
+- Phase definitions, gate conditions, or approval flows → `development-workflow-impl.md`
+- Mode detection rules or mode table → `development-workflow.md`
+- Security checklist items (XSS, CSRF, PII, SQL injection) → `security.md`
+- Go naming conventions (PascalCase, camelCase, receiver names) → `go-patterns.md`
+- Commit format, branch naming, PR requirements → `git-workflow.md`
+- Risk report JSON schema → `development-workflow-impl.md`
+- TDD cycle instructions (RED/GREEN/IMPROVE) → `development-workflow-impl.md`
+- Any rule that applies to ALL repos equally → belongs in intellisense global, not here
+
+## intellisense Health
+
+<!-- Auto-updated by /intellisense-audit -->
+@.intellisense-doc-health.json
+
+Last audit: [YYYY-MM-DD] | Score: [N]/100
+
+---
+
+**Last Updated**: [YYYY-MM-DD]
+**CLAUDE.md Version**: 4.0 (intellisense-aligned)
+**Stack**: Go

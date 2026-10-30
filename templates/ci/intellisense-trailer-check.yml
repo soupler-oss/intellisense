@@ -1,0 +1,78 @@
+# intellisense trailer-check workflow — Layer 3
+#
+# Installed by setup-repos.sh into each onboarded repo's
+# .github/workflows/intellisense-trailer-check.yml. Runs on every PR event and
+# validates that every commit in base..head carries a well-formed
+# Intellisense-Metadata trailer (matching the pre-push schema). Required-status-check
+# name is "intellisense/trailers" — that's the string to put in branch
+# protection or org Rulesets.
+#
+# Security posture:
+#   - Uses `pull_request` event (NOT pull_request_target). The
+#     GITHUB_TOKEN from fork PRs is read-only — sufficient for clone +
+#     interpret-trailers. v1 deliberately avoids pull_request_target
+#     because it would run fork-authored code with target-repo write
+#     permissions.
+#   - permissions block is set to `contents: read` — minimal scope.
+#   - All actions pinned by version tag (re-pin to SHAs if your repo
+#     policy requires).
+
+name: intellisense trailer check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  trailers:
+    name: intellisense/trailers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          # Need full history to walk base..head reliably.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base
+        run: |
+          git fetch origin "${{ github.event.pull_request.base.sha }}"
+
+      # The validator asks the intellisense engine for each commit's tier (the same model as the push gate),
+      # so install the released binary first.
+      - name: Install the intellisense engine
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/soupler-oss/intellisense/main/install.sh \
+            | INTELLISENSE_INSTALL_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Validate Intellisense-Metadata trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The validator script ships from INTELLISENSE_SETUP. In production
+          # rollout, each onboarded repo gets a symlink or vendored copy
+          # of scripts/validate-intellisense-trailers-pr.sh under
+          # .intellisense/scripts/ — falling back to a curl-bootstrap if absent
+          # so the workflow self-heals if the script wasn't installed.
+          VALIDATOR=""
+          for candidate in \
+              .intellisense/scripts/validate-intellisense-trailers-pr.sh \
+              scripts/validate-intellisense-trailers-pr.sh; do
+            if [ -x "$candidate" ]; then
+              VALIDATOR="$candidate"
+              break
+            fi
+          done
+          if [ -z "$VALIDATOR" ]; then
+            echo "⚠ validate-intellisense-trailers-pr.sh not present in this repo." >&2
+            echo "   Run setup-repos.sh from INTELLISENSE_SETUP to install it," >&2
+            echo "   or vendor it into .intellisense/scripts/." >&2
+            exit 1
+          fi
+          bash "$VALIDATOR" --base "$BASE_SHA" --head "$HEAD_SHA"
