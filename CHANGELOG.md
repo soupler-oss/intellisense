@@ -7,20 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Branch rulesets restrict updates on `main` and `develop` to the organization admin, through a pull request only
-  (`.github/governance/rulesets/`, described in `.github/PROTECTION_GUIDE.md`).
-
-### Fixed
-- Skills keep their front matter first when checked out with CRLF line endings (Windows); `.gitattributes` checks
-  text files out with LF everywhere.
-- CI, the release workflow and the GitHub Action build with the current stable Go, so macOS test binaries load.
-
-### Changed
-- README rewritten in plain language: what it does, six example scenarios, a five-minute start and a glossary, with
-  the technical reference below. The winget command is no longer listed until the package is published.
-
-## [1.0.0]
+## [1.0.0] - 2026-10-31
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**
 (per repository, any agent) and **Live mode** (Claude Code, at edit time).
@@ -61,3 +48,5 @@ Risk tiers, evidence gates and shared rules for coding agents, in two modes that
   Homebrew formula, a Scoop manifest and winget manifests built by the release workflow and attached to every
   release.
 - **repo-governance integration**: a pre-push hook that already runs `intellisense gate` counts as installed.
+- **Builds**: release binaries for macOS, Linux and Windows (amd64/arm64) are built with the current stable Go, and
+  text files check out with LF line endings on every platform (`.gitattributes`).
