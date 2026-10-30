@@ -12,7 +12,7 @@
       "owner": "Soupler",
       "copyright": "Soupler",
       "license": "Apache-2.0",
-      "visibility": "private",
+      "visibility": "public",
       "defaultBranch": "develop",
       "codeowners": "@soupler-labs",
       "bypass": "organization-admin",

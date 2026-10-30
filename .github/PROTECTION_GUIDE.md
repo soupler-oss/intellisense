@@ -6,14 +6,18 @@ Soupler uses **GitHub Flow with a promotion branch**: feature → `develop` → 
 
 | Ruleset | Target | What it enforces |
 |---|---|---|
-| `main-develop-protection` | `develop` | PR required (code owner, last push approved, threads resolved) · squash/rebase only · linear history · no force-push · required checks |
-| `main-protection` | `main` | PR required · merge commits only · no force-push · required checks incl. `Branch Policy` |
+| `main-develop-protection` | `develop` | PR required (code owner, last push approved, threads resolved) · only the organization admin can merge · squash/rebase only · linear history · no force-push · required checks |
+| `main-protection` | `main` | PR required · only the organization admin can merge · merge commits only · no force-push · required checks incl. `Branch Policy` |
 | `main-develop-undeletable` | `main`, `develop` | deletion blocked, no bypass actors |
 | `release-tags` | `v*` tags | only the maintainer (organization admin) may create, move or delete a release tag |
 
 Required checks: `Statutory Integrity` · `PR Metadata` · `Secret Scan` · `Tests` · `Branch Policy` (main only) · `Intellisense Gate` (develop only).
 
 `Intellisense Gate` is this repository running its own gate on itself (`.github/workflows/intellisense.yml`, `uses: ./`): a pull request must carry the evidence its risk tier needs under `.intellisense.yml`.
+
+## Who can merge
+
+Both branch rulesets carry **Restrict updates**: only the bypass actor — the organization admin, and only through a pull request — can change `main` or `develop`. Nobody pushes directly, and a collaborator's approved pull request still waits for the admin to merge it.
 
 ## What a ruleset cannot do
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Branch rulesets restrict updates on `main` and `develop` to the organization admin, through a pull request only
+  (`.github/governance/rulesets/`, described in `.github/PROTECTION_GUIDE.md`).
+
 ## [1.0.0]
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**
