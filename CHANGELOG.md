@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `L0-004` sets this project's writing voice (plain, specific, direct, honest) instead of a brand voice: intellisense
+  is an open-source tool, not a brand product.
 - The repository's default branch is `main`, so visitors see the released version. Contributors still open pull
   requests against `develop`; `CONTRIBUTING.md`, `.github/PROTECTION_GUIDE.md` and `docs/fork-workflow.md` say so.
 
