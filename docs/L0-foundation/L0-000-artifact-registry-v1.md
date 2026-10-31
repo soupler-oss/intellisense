@@ -28,7 +28,7 @@ Registry of every artifact in layer **L0 — Foundation Standards** (naming, tem
 | L0-001-master-document-template-v1 | Master Document Template | Final | v1 | Soupler | 2026-10-30 |
 | L0-002-naming-convention-version-control-v1 | Naming Convention, Versioning & Git Conventions | Final | v1 | Soupler | 2026-10-30 |
 | L0-003-error-message-api-standards-v1 | Error Message & API Error Standards | Final | v1 | Soupler | 2026-10-30 |
-| L0-004-tone-of-voice-writing-guidelines-v1 | Tone of Voice & Writing Guidelines | Final | v1 | Soupler | 2026-10-30 |
+| L0-004-tone-of-voice-writing-guidelines-v1 | Tone of Voice & Writing Guidelines | Final | v1 | Soupler | 2026-10-31 |
 | L0-005-github-governance-standard-v1 | GitHub Governance Standard | Final | v2 | Soupler | 2026-10-30 |
 | L0-006-change-propagation-governance-v1 | Change Propagation Governance | Final | v1 | Soupler | 2026-10-30 |
 | L0-007-portable-documentation-framework-v1 | Documentation Framework | Final | v1 | Soupler | 2026-10-30 |
