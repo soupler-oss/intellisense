@@ -183,7 +183,7 @@ done
 
 # Read intellisense version
 INTELLISENSE_VERSION=$(cat "$INTELLISENSE_SETUP_DIR/VERSION" 2>/dev/null | tr -d '[:space:]')
-[ -z "$INTELLISENSE_VERSION" ] && INTELLISENSE_VERSION="1.0.0"
+[ -z "$INTELLISENSE_VERSION" ] && INTELLISENSE_VERSION="1.0.1"
 
 # Set CLAUDE_ACTION to skip if --skip-claude-md was specified and no explicit action given
 if [ "$SKIP_CLAUDE_MD" = true ] && [ -z "$CLAUDE_MD_ACTION" ]; then
@@ -1667,7 +1667,7 @@ cat >> "$BOOTSTRAP_FILE" << 'BOOTSTRAP_EOF'
 [TODO — cannot be extracted automatically]
 
 **## Shared Database Tables** (tables written by 2+ services)
-[TODO — cannot be extracted automatically; verify consumers from service-map.md by hand (/shared-table-impact is planned, not yet built)]
+[TODO — cannot be extracted automatically; verify consumers from service-map.md by hand]
 
 **## API Contracts** (endpoints other services call)
 [TODO — cannot be extracted automatically]

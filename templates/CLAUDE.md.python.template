@@ -64,7 +64,7 @@ discussion unless asked. Expand only on follow-up."]
 
 ```
 Handles transaction processing and order fulfillment for the billing domain.
-Reads user profiles from auth-service; emits payout events to reporting-service.
+Reads user profiles from auth-service; emits invoice events to reporting-service.
 All database access via [Django ORM | SQLAlchemy] with explicit transaction support.
 Financial operations require row-level locks (select_for_update / with_for_update) on balance mutations.
 ```
@@ -144,7 +144,7 @@ Change Contract `risk_level` by one tier and requires explicit user confirmation
 
 - **Blocking I/O in async path**: Calling sync DB drivers, `requests`, or `time.sleep` from inside
   an `async def` blocks the event loop — use `asyncio.to_thread()` or async drivers
-- **Shared library modification**: Changes affect ALL downstream consumers; run `/discover-impact`
+- **Shared library modification**: Changes affect ALL downstream consumers; list every consumer from service-map.md and build each one against the change
   before modifying any shared package
 - **Row-lock missing**: Any mutation to a balance or financial aggregate without
   `select_for_update()` / `with_for_update()` is a race condition — escalate automatically

@@ -33,7 +33,7 @@
 
 ## Shared Libraries
 
-- Uses: shared-go-lib (or N/A)
+- Uses: shared-lib (or N/A)
 - Exports: [functions/interfaces used by other services]
 
 ## Key Patterns

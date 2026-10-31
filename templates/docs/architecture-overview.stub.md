@@ -30,7 +30,7 @@
 ## Dependencies
 
 ### Internal
-- Shared libraries: [shared-go-lib, shared-utils, etc.]
+- Shared libraries: [shared-lib, shared-utils, etc.]
 
 ### External
 - Databases: [PostgreSQL, Redis, etc.]

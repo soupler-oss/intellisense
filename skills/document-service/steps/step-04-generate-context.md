@@ -23,16 +23,16 @@ Scan codebase to extract:
 **Owned Tables** (Go/PHP only):
 - Scan models/ or app/Models/ for database model definitions
 - Extract table names and field types
-- Example: `payouts: {id: int64, amount: int64, status: string, created_at: timestamp, deleted_at: timestamp}`
+- Example: `invoices: {id: int64, amount: int64, status: string, created_at: timestamp, deleted_at: timestamp}`
 
 **API Endpoints**:
 - Scan routes/ or app/Http/ or src/app/ for endpoint definitions
 - Extract: method (GET/POST/PUT/DELETE), path, authentication type, consumer services (if documented)
-- Example: `GET /api/payouts/list — auth: Bearer token — consumers: orders-service, dashboard`
+- Example: `GET /api/invoices/list — auth: Bearer token — consumers: orders-service, dashboard`
 
 **Shared Library Imports**:
 - Read go.mod or composer.json
-- List internal org packages: shared-go-lib (Go), org-shared-libs (PHP)
+- List internal org packages: shared-lib (Go), shared-libs (PHP)
 - Extract specific packages used: encryption, kafka, notifications, email
 
 **Key Patterns**:
@@ -58,23 +58,23 @@ Correct? [✓] Yes [ ] No (select different)
 
 Category 3: Owned Tables (5 detected)
 Detected:
-  - payouts: {id, amount_minor_units: int64, status, created_at, updated_at, deleted_at}
-  - journal_entries: {id, payout_id, amount_minor_units: int64, ...}
+  - invoices: {id, amount_minor_units: int64, status, created_at, updated_at, deleted_at}
+  - journal_entries: {id, invoice_id, amount_minor_units: int64, ...}
   - ...
 Review and confirm? [✓] Yes [ ] Edit [ ] Skip
 
 Category 4: API Endpoints (8 detected)
 Detected:
-  - GET /api/payouts/list
-  - POST /api/payouts
+  - GET /api/invoices/list
+  - POST /api/invoices
   - ... (8 total)
 Review and confirm? [✓] Yes [ ] Edit [ ] Skip
 
 Category 5: Shared Library Imports
 Detected:
-  - shared-go-lib/crypto
-  - shared-go-lib/kafka
-  - shared-go-lib/notifications
+  - shared-lib/crypto
+  - shared-lib/kafka
+  - shared-lib/notifications
 Correct? [✓] Yes [ ] No (edit list)
 
 Category 6: Key Patterns
@@ -102,21 +102,21 @@ Generate <1.2k token version:
 **Stack**: Go | GORM ORM | PostgreSQL
 
 ## Owned Tables
-- `payouts`: id, amount_minor_units (int64), status (enum), created_at, updated_at, deleted_at
-- `journal_entries`: id, payout_id (fk), amount_minor_units (int64), created_at, updated_at
-- `payout_items`: id, payout_id (fk), item_id, quantity, amount_minor_units (int64)
+- `invoices`: id, amount_minor_units (int64), status (enum), created_at, updated_at, deleted_at
+- `journal_entries`: id, invoice_id (fk), amount_minor_units (int64), created_at, updated_at
+- `invoice_items`: id, invoice_id (fk), item_id, quantity, amount_minor_units (int64)
 
 ## API Endpoints
-- `GET /api/payouts/list` — Auth: Bearer | Consumers: Dashboard, Reporting
-- `POST /api/payouts` — Auth: Bearer | Consumers: Payout Service
-- `GET /api/payouts/:id` — Auth: Bearer | Consumers: Dashboard
-- `PUT /api/payouts/:id/finalize` — Auth: Service | Consumers: Payout Cycle
-- `DELETE /api/payouts/:id` (soft-delete) — Auth: Service
+- `GET /api/invoices/list` — Auth: Bearer | Consumers: Dashboard, Reporting
+- `POST /api/invoices` — Auth: Bearer | Consumers: Invoice Service
+- `GET /api/invoices/:id` — Auth: Bearer | Consumers: Dashboard
+- `PUT /api/invoices/:id/finalize` — Auth: Service | Consumers: Invoice Cycle
+- `DELETE /api/invoices/:id` (soft-delete) — Auth: Service
 
 ## Shared Libraries
-- shared-go-lib/crypto: Encryption utilities
-- shared-go-lib/kafka: Event publishing
-- shared-go-lib/notifications: Email/Slack alerts
+- shared-lib/crypto: Encryption utilities
+- shared-lib/kafka: Event publishing
+- shared-lib/notifications: Email/Slack alerts
 
 ## Key Patterns
 - **ORM**: GORM with database/sql for atomic operations
@@ -142,7 +142,7 @@ Write to `knowledge-base/00-system-context.md`
     "service_name": "orders-service",
     "stack": "go",
     "framework_type": "GORM",
-    "tables_confirmed": ["payouts", "journal_entries", "payout_items"],
+    "tables_confirmed": ["invoices", "journal_entries", "invoice_items"],
     "endpoints_confirmed": 5,
     "project_context_tokens": 950,
     "categories_confirmed": ["Service name", "Stack", "Owned tables", "API endpoints", "Shared libraries", "Key patterns"]

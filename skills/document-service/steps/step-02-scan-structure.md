@@ -74,7 +74,7 @@ Count total files in each directory. Record max depth, largest directory by file
 ### 5. Detect Shared Libraries Used
 
 **Go**:
-- Read go.mod, list imports of github.com/your-org packages (e.g., shared-go-lib)
+- Read go.mod, list imports of github.com/your-org packages (e.g., shared-lib)
 - Record: imports_shared_go: true/false
 
 **PHP**:
@@ -97,7 +97,7 @@ Add to state.json:
     "tests": 18
   },
   "detected_patterns": {
-    "tables_detected": ["payouts", "journal_entries", "account_balances"],
+    "tables_detected": ["invoices", "journal_entries", "account_balances"],
     "endpoints_detected": 8,
     "imports_shared_go": true
   }

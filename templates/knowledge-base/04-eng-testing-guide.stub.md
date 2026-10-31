@@ -59,13 +59,13 @@ ng test --watch=false
 
 **Example**:
 ```go
-func TestPayoutWithInsufficientBalance(t *testing.T) {
+func TestInvoiceWithInsufficientBalance(t *testing.T) {
   // Arrange: Set up test data
   user := createTestUser(t, "test@example.com")
-  payout := createTestPayout(t, user.ID, 100000)
+  invoice := createTestInvoice(t, user.ID, 100000)
 
   // Act: Execute the operation
-  result, err := service.ProcessPayout(ctx, payout.ID)
+  result, err := service.ProcessInvoice(ctx, invoice.ID)
 
   // Assert: Verify results
   assert.NotNil(t, err)
@@ -87,7 +87,7 @@ func TestPayoutWithInsufficientBalance(t *testing.T) {
 | repository/ | 80% | 70% (integration test coverage OK) |
 | models/ | — | — (no logic, not required) |
 
-**Financial code** (balance mutations, payout, reconciliation):
+**Financial code** (balance mutations, invoice, reconciliation):
 - **95% coverage minimum** (no exceptions)
 - **Path-based testing**: every decision branch exercised
 - **Edge cases**: boundary values (amount = 0, max int64, etc.)
@@ -110,17 +110,17 @@ php artisan test --coverage
 
 **Go (using factories)**:
 ```go
-type PayoutFactory struct{}
+type InvoiceFactory struct{}
 
-func (f *PayoutFactory) Create(userID int64) *Payout {
-  return &Payout{
+func (f *InvoiceFactory) Create(userID int64) *Invoice {
+  return &Invoice{
     UserID:      userID,
     AmountCents: 100000,
     Status:      "NEW",
   }
 }
 
-func (f *PayoutFactory) WithStatus(status string) *Payout {
+func (f *InvoiceFactory) WithStatus(status string) *Invoice {
   s := f.Create(1)
   s.Status = status
   return s
@@ -129,7 +129,7 @@ func (f *PayoutFactory) WithStatus(status string) *Payout {
 
 **PHP (Laravel factories)**:
 ```php
-$payout = Payout::factory()->create([
+$invoice = Invoice::factory()->create([
   'user_id' => $user->id,
   'amount_minor_units' => 100000,
   'status' => 'NEW',
@@ -192,7 +192,7 @@ Run: `docker-compose up test_db test_redis`, then `go test ./...`
 
 | Operation | Target Latency | Test |
 |-----------|----------------|------|
-| Payout processing | <1s (p95) | `BenchmarkProcessPayout` |
+| Invoice processing | <1s (p95) | `BenchmarkProcessInvoice` |
 | Get user balance | <100ms (p95) | `BenchmarkGetBalance` |
 | Reconciliation job | <10s (p95) | Integration test with 1000 txns |
 
@@ -210,7 +210,7 @@ go test ./... -bench=. -benchmem
 **Pattern**: `Test{FunctionName}_{Scenario}_{ExpectedOutcome}`
 
 **Examples**:
-- `TestProcessPayout_WithInsufficientBalance_ReturnsError`
+- `TestProcessInvoice_WithInsufficientBalance_ReturnsError`
 - `TestGetUserBalance_WithCacheHit_ReturnsQuickly`
 - `TestReconciliationJob_WithMissingTransactions_AlertsOps`
 

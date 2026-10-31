@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-31
+
+### Fixed
+- **Comments that silence a tool are no longer routine.** A comment-only edit that adds a linter, type-checker,
+  scanner or coverage directive — `nolint`, `noqa`, `nosec`, `nosemgrep`, `@ts-ignore`, `type: ignore`,
+  `istanbul ignore`, `pragma: no cover`, `gitleaks:allow`, `intellisense:allow-secret` and similar — keeps its tier
+  instead of taking the fast lane. Applies to the push gate, CI and Live mode's phrase check. Files matched by a rule
+  were never affected.
+- README: a comment-only edit is routine only outside risky paths; the README had said "even in a risky file".
+- `docs/ci.md` pins the GitHub Action at the current release; it named a version that does not exist.
+
+### Added
+- `docs/integrations.md`: ticket systems (GitHub, Jira, Linear, Beads), code-review-graph and usage telemetry — what
+  each is, what it adds, how to turn it on in Core and Live mode, and how to turn it off.
+- `docs/customization.md`: tested recipes for risky folders, extra tiers, required tests, contract fields, ticket
+  checks, your own rules, languages, assistants, slash commands, secrets and remotes.
+- `docs/README.md`: every document in one map; the README gains a "Features and customization" table.
+
+### Changed
+- README: each example is a full scenario — the situation, what intellisense does (with real output) and how to set
+  it up. "Two ways to use it" explains why Live mode needs Claude Code and which slash commands Core mode can install.
+- `QUICK_START.md` and `docs/WORKFLOW.md` rewritten around a neutral example.
+- Skills, templates and docs no longer refer to slash commands that do not exist; those checks are described as
+  manual steps, and the content validator no longer allowlists missing commands.
+- Examples in skills, `CLAUDE.md` templates, knowledge-base templates and rules use one neutral billing domain
+  (invoices, `shared-lib`) instead of names left from an earlier setup. Finance keywords that detect risky prompts are
+  unchanged.
+
 ## [1.0.0] - 2026-10-31
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**

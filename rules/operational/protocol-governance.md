@@ -41,7 +41,7 @@ Each repo maintains authoritative knowledge about their specific business logic,
 - **API Contracts** (endpoints, methods, auth, consumers, rate limits)
 - **Data Model** (tables, columns, indexes, relationships, soft-delete strategy)
 - **Business Logic Rules** (financial rules, validation rules, state machines)
-- **Critical Flows** (order processing, payment payout, user signup, etc.)
+- **Critical Flows** (order processing, payments, user signup, etc.)
 - **Risk Register** (high-risk files, protected tables, audit trails)
 - **Integrations** (external APIs, webhooks, webhooks we send)
 - **Deployment Strategy** (canary, blue-green, feature flags, rollback runbooks)
@@ -196,7 +196,7 @@ These areas are not yet governed by intellisense but will be in v2:
 
 - **Agent Behavior Contracts**: What agents can and cannot do during each phase (coming in v2)
 - **Cross-Repo Protocol**: How repos coordinate when one change affects multiple services (coming in v2)
-- **Financial Audit Trail**: Specific rules for payment/payout repos (currently in individual CLAUDE.md files, will be centralized in v2)
+- **Financial Audit Trail**: Specific rules for payment repos (currently in individual CLAUDE.md files, will be centralized in v2)
 - **Schema Change Governance**: How to migrate shared tables safely (currently manual, will have automation in v2)
 
 ---

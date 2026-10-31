@@ -57,8 +57,8 @@ users (1) ──── (M) transactions
        ├─ user_id FK
        └─ settled_at determines ownership
 
-payouts (1) ──── (M) invoices
-       ├─ payout_id FK
+invoices (1) ──── (M) invoices
+       ├─ invoice_id FK
        └─ Must be COMPLETED before invoice created
 ```
 
@@ -70,7 +70,7 @@ payouts (1) ──── (M) invoices
 
 **Soft-delete only** (maintain audit trail):
 - transactions — Financial audit trail must be preserved
-- payouts — Payout history must be queryable
+- invoices — Invoice history must be queryable
 - [any table with compliance/audit requirement]
 
 **Hard-delete allowed** (non-critical):
@@ -87,7 +87,7 @@ payouts (1) ──── (M) invoices
 |-------|-------|---------|--------|
 | transactions | idx_user_created | (user_id, created_at DESC) | Per-user history queries |
 | transactions | idx_status_updated | (status, updated_at) | Job queue scans |
-| payouts | idx_user_status | (user_id, status) | User dashboard filter |
+| invoices | idx_user_status | (user_id, status) | User dashboard filter |
 
 ---
 

@@ -42,7 +42,7 @@ Scanned: 23 files modified | 1847 lines added
 
 #### Auth Gaps
 ✓ All new endpoints require authentication check
-✓ Authorization enforced (user can only reconcile their own payouts)
+✓ Authorization enforced (user can only reconcile their own invoices)
 ✓ Financial endpoints have rate limiting (100 req/min)
 
 #### Financial Security (CRITICAL)

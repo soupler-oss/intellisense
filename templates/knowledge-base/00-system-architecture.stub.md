@@ -36,7 +36,7 @@ TODO if applicable — protocol (WebSocket/SSE), message types, broadcast patter
 
 <!-- TODO: High-level data flow for main requests -->
 
-**Example**: Payout request → handler validates → service updates account → emits event → job updates passbook
+**Example**: Invoice request → handler validates → service updates account → emits event → job updates ledger
 
 ## Database Design
 
@@ -75,5 +75,5 @@ TODO if applicable — protocol (WebSocket/SSE), message types, broadcast patter
 - [Constraint]: [Why it exists]
 
 Example:
-- SELECT FOR UPDATE required on account_balances: Database-level locking prevents race conditions during concurrent payouts
+- SELECT FOR UPDATE required on account_balances: Database-level locking prevents race conditions during concurrent invoices
 - 60-second timeout on payment gateway calls: Gateway SLA is 120s; we timeout at 60s and retry

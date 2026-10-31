@@ -58,9 +58,9 @@ Example structure (Go service with GORM):
 
 {data_flow_description}
 
-Example (Go service — Payout creation):
+Example (Go service — Invoice creation):
 ```
-1. HTTP POST /api/payouts
+1. HTTP POST /api/invoices
    ↓
 2. Handler: ParseRequest → ValidateInput → ExtractFields
    ↓
@@ -68,19 +68,19 @@ Example (Go service — Payout creation):
    ↓
 4. Handler: CallService(ctx, createRequest)
    ↓
-5. Service: CheckIdempotency(transaction_reference in payouts table?)
+5. Service: CheckIdempotency(transaction_reference in invoices table?)
    ↓
 6. Service: ValidateAmount (must be > 0, within limits)
    ↓
-7. Service: BeginTx → Call repository.CreatePayout(ctx, tx, payout)
+7. Service: BeginTx → Call repository.CreateInvoice(ctx, tx, invoice)
    ↓
-8. Repository: INSERT payout (amount_minor_units, status=pending, created_at, idempotency_key)
+8. Repository: INSERT invoice (amount_minor_units, status=pending, created_at, idempotency_key)
    ↓
-9. Repository: INSERT journal_entries (payout_id, -amount_minor_units, created_at)
+9. Repository: INSERT journal_entries (invoice_id, -amount_minor_units, created_at)
    ↓
 10. Service: Commit transaction
     ↓
-11. Service: Return PayoutDTO (id, status, created_at)
+11. Service: Return InvoiceDTO (id, status, created_at)
     ↓
 12. Handler: Write JSON response (200 OK)
     ↓
@@ -133,14 +133,14 @@ Example:
 
 Example (Go):
 ```
-- tests/unit/payout_service_test.go
-  - TestCreatePayout_ValidInput
-  - TestCreatePayout_DuplicateIdempotencyKey
-  - TestCreatePayout_InsufficientAmount
+- tests/unit/invoice_service_test.go
+  - TestCreateInvoice_ValidInput
+  - TestCreateInvoice_DuplicateIdempotencyKey
+  - TestCreateInvoice_InsufficientAmount
   
-- tests/unit/payout_repository_test.go
-  - TestCreatePayout_Insert
-  - TestCreatePayout_Soft_Delete_Filtering
+- tests/unit/invoice_repository_test.go
+  - TestCreateInvoice_Insert
+  - TestCreateInvoice_Soft_Delete_Filtering
 ```
 
 ### Integration Tests
@@ -148,10 +148,10 @@ Example (Go):
 
 Example (Go):
 ```
-- tests/integration/payout_e2e_test.go
-  - TestCreatePayout_FullFlow (HTTP request → Database → Verify)
-  - TestPayoutConcurrency (Multiple requests, verify no duplicate processing)
-  - TestPayoutIdempotency (Same transaction_reference, verify single row)
+- tests/integration/invoice_e2e_test.go
+  - TestCreateInvoice_FullFlow (HTTP request → Database → Verify)
+  - TestInvoiceConcurrency (Multiple requests, verify no duplicate processing)
+  - TestInvoiceIdempotency (Same transaction_reference, verify single row)
 
 - tests/integration/database_test.go
   - Setup: Spin up test PostgreSQL, run migrations
@@ -165,9 +165,9 @@ Example (Go):
 Example:
 ```
 - tests/regression/previous_bugs_test.go
-  - TestPayout_RaceCondition_Issue_123 (Verify concurrent updates don't cause balance errors)
-  - TestPayout_SoftDelete_Audit_Trail (Verify deleted_at set, row still queryable if needed)
-  - TestPayout_SelectForUpdate_Lock (Verify balance mutations are serialized)
+  - TestInvoice_RaceCondition_Issue_123 (Verify concurrent updates don't cause balance errors)
+  - TestInvoice_SoftDelete_Audit_Trail (Verify deleted_at set, row still queryable if needed)
+  - TestInvoice_SelectForUpdate_Lock (Verify balance mutations are serialized)
 ```
 
 ---
@@ -198,7 +198,7 @@ Example:
 ```
 - New endpoint? Use feature flag, gradual rollout (5% → 25% → 100%)
 - New database column? Flag the new code path, old path still active
-- Behavior change in payout logic? Flag new behavior, compare results against old for 7 days
+- Behavior change in invoice logic? Flag new behavior, compare results against old for 7 days
 - Removal of old code? Only after feature flag can be removed AND all consumers migrated
 ```
 
@@ -209,9 +209,9 @@ Example:
 ```
 1. If code deploy fails: git revert [commit], redeploy
 2. If migration fails: Run rollback SQL (stated in PR), verify data integrity
-3. If logic change causes incorrect payouts: 
-   - Identify affected payout_ids (WHERE created_at BETWEEN [start] AND [end])
-   - Soft-delete invalid payouts (UPDATE payouts SET deleted_at = NOW() WHERE id IN (...))
+3. If logic change causes incorrect invoices: 
+   - Identify affected invoice_ids (WHERE created_at BETWEEN [start] AND [end])
+   - Soft-delete invalid invoices (UPDATE invoices SET deleted_at = NOW() WHERE id IN (...))
    - Reprocess valid ones with fix
    - No hard-delete for audit trail preservation
 4. If shared library updated and breaks consumer: 

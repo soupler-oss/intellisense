@@ -8,11 +8,11 @@
 before they can be pushed. It works the same for Claude Code, Codex, GitHub Copilot and Cursor.**
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2C4BFF)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-2C4BFF)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-2C4BFF)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/go-%E2%89%A5%201.22-00ADD8)](go.mod)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555)](#install)
 
-[What it does](#what-it-does) · [Examples](#examples) · [Get started](#get-started-in-5-minutes) · [Words we use](#words-we-use) · [Two ways to use it](#two-ways-to-use-it) · [Reference](#reference) · [FAQ](#faq)
+[What it does](#what-it-does) · [Examples](#examples) · [Get started](#get-started-in-5-minutes) · [Words we use](#words-we-use) · [Two ways to use it](#two-ways-to-use-it) · [Features](#features-and-customization) · [Reference](#reference) · [FAQ](#faq)
 
 </div>
 
@@ -45,47 +45,156 @@ or whatever wrote it. It's one program with nothing else to install besides `git
 
 ## Examples
 
-**1. The assistant fixes a typo in the README.** <br />
-Routine change. You push, it goes through. No extra steps.
+Each example shows the situation, what Intellisense does about it, and what you need to turn on. Examples 1–6 all
+work in Core mode (`intellisense init`), with any AI assistant.
 
-**2. The assistant changes the payment code.** <br />
-High risk. The push stops:
+### 1. The assistant fixes a typo in the README
+
+**What happens:** you push and it goes through. Docs, tests and comment-only edits are routine (Tier 0) and need
+nothing extra.
+
+**Set up:** nothing beyond `intellisense init`.
+
+### 2. The assistant changes the payment code
+
+**The situation:** you ask an assistant to add refunds, and it edits `payments/charge.go`. Without a check, the change
+looks like any other commit — nobody can tell from history that money code changed, why, or whether anyone thought
+about the risk.
+
+**What Intellisense does:** `payments/` matches the built-in "financial" rule, so the change is high risk (Tier 2).
+The push stops and says what's missing:
 
 ```console
 $ git push
 intellisense gate: Tier 2 — high risk
-  ✗ commit 894b196 "feat: refund flow" is Tier 2 and has no task trailer
+  Tier 2 because:
+    payments/charge.go                               financial
+  ✗ commit 1ac7ce5 "feat: refunds" is Tier 2 and has no task trailer
       fix: add a trailer line such as "Task: PROJ-123" to that commit's message
   ✗ this change is Tier 2 and has no change contract
       fix: add a line "Change Contract: scope=<scope>, risk=low|medium|high" to a commit message
 BLOCKED: 2 problem(s).
 ```
 
-You add the ticket and the note to the commit, and the push goes through:
+You add the ticket and a one-line note, and the push goes through:
 
 ```console
-$ git commit --amend -m "feat: refund flow" -m "Task: PROJ-12" \
-    -m "Change Contract: scope=refund flow in payments, risk=high"
+$ git commit --amend -m "feat: refunds" -m "Task: PROJ-12" \
+    -m "Change Contract: scope=refunds in payments, risk=high"
 $ git push
 PASSED
 ```
 
-Now the reviewer knows which ticket the change belongs to and that its author called it high risk.
+Now the reviewer, and anyone reading the history later, knows which ticket the change belongs to and that its author
+called it high risk.
 
-**3. Your team uses Claude Code and Copilot.** <br />
-You add a rule like "never log card numbers" once. Both assistants get it, each in its own format.
+**Set up:** nothing beyond `intellisense init` — logins, payments, migrations and secrets are high risk by default.
+Mark your own risky folders in `.intellisense.yml` under `tiers:`.
 
-**4. Someone skips the local check with `git push --no-verify`.** <br />
-The same check runs on the pull request in GitHub, and it's a required check, so the pull request can't be merged
-until it passes.
+### 3. One rule for every AI assistant
 
-**5. A pull request tries to relax the rules.** <br />
-CI judges every pull request by the rules on the branch it's merging *into*, not by the rules inside the pull request.
-And changing the rules file is itself a high-risk change.
+**The situation:** your team uses Claude Code and GitHub Copilot. You want both to follow "never log card numbers".
+Claude reads `CLAUDE.md`, Copilot reads `.github/copilot-instructions.md`, so you'd have to write the rule twice —
+and next month someone updates one file and forgets the other.
 
-**6. The assistant only rewords a code comment.** <br />
-Treated as routine, even in a risky file — unless the comment turns something off, like a lint rule or a security
-check.
+**What Intellisense does:** you write the rule once, as a Markdown file:
+
+```markdown
+<!-- .intellisense/rules/organization/payments.md -->
+---
+globs: ["payments/**"]
+---
+# Payments
+
+- Never log card numbers, CVVs or full bank account numbers.
+```
+
+`intellisense sync` writes it into each assistant's own format:
+
+```console
+$ intellisense sync
+  created   .github/instructions/intellisense-organization-payments.instructions.md
+  updated   CLAUDE.md
+✓ synced 8 agent instruction files (2 changed)
+```
+
+Copilot gets a file that applies only to `payments/**`; `CLAUDE.md` gets a pointer to the rule that Claude reads when
+it works there. (Codex and Cursor get theirs the same way.) If someone later edits an assistant's file by hand, the CI
+check fails until it is regenerated:
+
+```console
+$ intellisense sync --check
+agent instructions are out of date:
+  changed   .github/copilot-instructions.md
+```
+
+**Set up:** choose your assistants at `intellisense init` (or `--agents claude,copilot,codex,cursor`), put rules in
+`.intellisense/rules/organization/`, run `intellisense sync`, and commit the result.
+
+### 4. Someone skips the check with `git push --no-verify`
+
+**The situation:** the local check is a git hook, and anyone can skip a git hook with `--no-verify`.
+
+**What Intellisense does:** the same check runs again on every pull request, as a GitHub Action called
+**Intellisense Gate**. Make it a required check and the pull request cannot be merged until the evidence is there,
+whoever pushed it and however.
+
+**Set up:**
+1. `intellisense init --ci` writes `.github/workflows/intellisense.yml`.
+2. On GitHub: **Settings → Rules → Rulesets** → your branch rule → **Require status checks to pass** → add
+   **Intellisense Gate**.
+
+Other CI systems: run `intellisense check --base <ref> --head <ref>` in a job ([docs/ci.md](docs/ci.md)).
+
+### 5. A pull request tries to loosen the rules
+
+**The situation:** a pull request changes payment code *and* deletes the "financial" rule from `.intellisense.yml`,
+hoping the payment change then counts as ordinary.
+
+**What Intellisense does:** it judges every change by the rules on the branch being merged *into*, not the rules inside
+the pull request. Even though this pull request deleted the rule, the payment file is still flagged — and the rules file
+itself is high risk too:
+
+```console
+$ intellisense gate --base main
+intellisense gate: Tier 2 — high risk
+  Tier 2 because:
+    .intellisense.yml                                governance policy
+    payments/charge.go                               financial
+BLOCKED: 2 problem(s).
+```
+
+To really change a rule, you change `.intellisense.yml` in its own reviewed pull request with a ticket and a note.
+Once merged, it applies to later pull requests.
+
+**Set up:** nothing — this is how the check always works.
+
+### 6. The assistant only rewords a code comment
+
+**The situation:** an assistant tidies a comment in an ordinary file. Asking for a ticket for that would be noise.
+
+**What Intellisense does:** if a file isn't in a risky folder and its change only touches comments, the change is
+routine:
+
+```console
+$ intellisense classify
+Tier 0 — routine
+  Tier 0  app/greet.go                                     fast-lane diff only changes comments
+```
+
+Two exceptions keep this safe:
+- **Files in risky folders never get this shortcut.** A comment edit in `payments/charge.go` is still high risk.
+- **Comments that switch something off don't count as harmless.** A comment containing words like "disable",
+  "bypass", "skip validation" or "comment out", or a directive that silences a tool — `// nolint:gosec`, `# noqa`,
+  `# nosec`, `// @ts-ignore`, `/* istanbul ignore */` — is treated as a real change:
+
+```console
+$ intellisense classify          # the comment now says "TODO: disable the rate limit check for now"
+Tier 1 — standard
+  Tier 1  app/greet.go                                     default   no rule matched
+```
+
+**Set up:** on by default (`fast_lane: true` in `.intellisense.yml`).
 
 ## Who it's for
 
@@ -151,15 +260,42 @@ a "Next:" hint, and `intellisense help <command>` explains any command with exam
 
 ## Two ways to use it
 
-| | **Core mode** — start here | **Live mode** — for Claude Code teams |
+| | **Core mode** — start here | **Live mode** — extra, for Claude Code |
 |---|---|---|
 | Set up with | `intellisense init` in each repository | `intellisense live install` once per computer |
 | Works with | Any AI assistant, or none | Claude Code |
-| Checks happen | When you push, and in CI | Also *while* Claude is editing: a risky edit waits until a change note is approved |
-| Extras | — | 19 slash commands (`/plan`, `/tdd`, `/verify`, …), design helpers, optional usage tracking |
+| When it checks | When you push, and on every pull request | Also *while* Claude is working, before a risky edit is made |
+| Shared rules | Written into each assistant's own file | The same, plus the full rule library for Claude on that computer |
+| Slash commands | 10, for Claude Code, if you choose them (`skills:`) | All 19 |
 
-Both use the same rules and the same risk levels, so an edit, a push and CI always agree. Live mode is described in
-[docs/live-mode.md](docs/live-mode.md).
+**Core mode** is the product: the risk levels, the push check, the pull-request check and shared rules. It is a plain
+command-line tool that works through git, so it doesn't matter which assistant (or person) wrote the code.
+
+**Live mode** adds checks *during* a Claude Code session:
+- each request you type is sorted by risk before Claude starts;
+- if Claude tries to edit a risky file without an approved change note, the edit is stopped and Claude is asked to
+  write the note first — so the problem is caught before the code exists, not at push time;
+- optional extras: commit metadata, usage tracking, a code graph, Beads.
+
+**Why Live mode only works with Claude Code:** it runs inside the assistant, so it needs the assistant to call it
+before acting. Claude Code has *hooks* for exactly that — one runs when you send a request, another before each file
+edit — and Live mode is built on them. Intellisense doesn't plug into other assistants this way yet, so for them the
+check happens at push and in CI (Core mode), which still catches every change before it is merged.
+
+**Slash commands in Core mode:** yes, Core mode can install them too, for Claude Code. Ten work on their own in any
+repository — `/plan`, `/tdd`, `/verify`, `/security-scan`, `/diagnose`, `/incident`, `/document-service`,
+`/e2e-test`, `/load-test`, `/performance-test`:
+
+```bash
+intellisense init --skills plan,tdd,verify     # or list them under skills: in .intellisense.yml, then intellisense sync
+intellisense skills list                       # what is available
+```
+
+The other nine (`/contract`, `/ship`, `/code-review`, …) depend on Live mode's hooks and files, so they come only with
+`intellisense live install`. Slash commands are a Claude Code feature; Codex, Copilot and Cursor get the rules but not
+the commands.
+
+Live mode is described in [docs/live-mode.md](docs/live-mode.md).
 
 ## Install
 
@@ -187,7 +323,7 @@ The rest of this page is for setting it up in detail.
 | **Risk tiers from paths** | `.intellisense.yml` maps file paths to tiers with patterns. Defaults cover auth, money, migrations, secrets, CI, infrastructure, dependencies and agent instructions. Tiers are a list: add a Tier 3, rename one, or change what each needs. |
 | **Evidence you choose** | Per tier: a task reference on each commit, a change contract, a changed test. Task references can be checked against GitHub, Jira, Linear or Beads. |
 | **Contracts with a schema** | A contract is a commit line or a Markdown file (`intellisense contract new`), checked against the fields your policy defines. |
-| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.0`) runs it on every pull request, with annotations and a job summary. |
+| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.1`) runs it on every pull request, with annotations and a job summary. |
 | **One rule set, four agents** | `intellisense sync` writes `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` plus scoped `.github/instructions/`, and `.cursor/rules/`, all from `.intellisense/rules/`. CI fails when they drift. |
 | **Rules worth following** | Security and reasoning baselines, coding style, testing, and rules for Go, PHP/Laravel, Angular, React, Node, Python, Java, Flutter, Rust, C#, Ruby, Swift and C/C++. Add your own language with `custom_stacks`. |
 | **Your own rules** | Files in `.intellisense/rules/organization/` reach every agent, optionally only for some paths. Edit a built-in rule and updates keep your version; switch one off with `rules.disable`. |
@@ -291,14 +427,26 @@ Run `intellisense check --base <ref> --head <ref>` in a job: it exits `1` when t
 [docs/ci.md](docs/ci.md).
 </details>
 
-## Documentation
+## Features and customization
 
-- **[Quick start](QUICK_START.md)** and **[Installation](INSTALLATION.md)** — step by step
-- **[Policy reference](docs/policy.md)** — every setting in `.intellisense.yml`
-- **[Agents](docs/agents.md)** — what each AI assistant's file contains
-- **[CI](docs/ci.md)** — the GitHub Action and other CI systems
-- **[Live mode](docs/live-mode.md)** — live checks inside Claude Code
-- **[Changelog](CHANGELOG.md)**
+| Feature | What it does | Learn more |
+|---|---|---|
+| Risk tiers | Sorts every change by the paths it touches; add folders, tiers and requirements | [customization](docs/customization.md#mark-a-folder-as-risky) · [policy](docs/policy.md#how-a-tier-is-decided) |
+| Evidence | Ticket references, change contracts, changed tests — per tier | [customization](docs/customization.md#require-a-changed-test) · [policy](docs/policy.md#evidence) |
+| Change contracts | One line or a Markdown file; you choose the required fields | [customization](docs/customization.md#change-what-a-change-contract-must-say) · [policy](docs/policy.md#contract) |
+| Push check | A git hook that blocks a push missing evidence, and says how to fix it | [example 2](#2-the-assistant-changes-the-payment-code) |
+| Pull-request check | The same check as a GitHub Action, judged by the base branch's rules | [CI](docs/ci.md) · [example 5](#5-a-pull-request-tries-to-loosen-the-rules) |
+| Shared rules | One rule set written into Claude Code, Codex, Copilot and Cursor files | [agents](docs/agents.md) · [example 3](#3-one-rule-for-every-ai-assistant) |
+| Your own rules | Organization rules, scoped to paths; change or switch off built-in ones | [customization](docs/customization.md#add-your-own-rules-for-the-ai-assistants) |
+| Languages | Rules for 13 languages, plus your own | [customization](docs/customization.md#add-a-language) |
+| Slash commands | `/plan`, `/tdd`, `/verify` and more for Claude Code | [customization](docs/customization.md#add-slash-commands-for-claude-code) · [workflow](docs/WORKFLOW.md) |
+| Ticket systems | GitHub Issues, Jira, Linear or Beads; optionally check tickets exist | [integrations](docs/integrations.md#task-trackers) |
+| Code map | code-review-graph for "who calls this?" during review (Live mode) | [integrations](docs/integrations.md#code-review-graph) |
+| Usage telemetry | Per-commit metadata and a daily summary to your own collector (Live mode) | [integrations](docs/integrations.md#usage-telemetry) |
+| Live mode | Checks inside Claude Code while it works | [Live mode](docs/live-mode.md) |
+| Secrets and remotes | Flags likely secrets; refuses pushes to chosen remotes | [customization](docs/customization.md#secrets-in-commits) |
+
+Every document, in one list: **[docs/README.md](docs/README.md)**.
 
 How intellisense itself is built and run — product requirements, architecture decisions, the release runbook — is in
 the documentation layers under [`docs/`](docs/): [L2 product](docs/L2-product/), [L3 architecture](docs/L3-architecture/),

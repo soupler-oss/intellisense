@@ -31,18 +31,18 @@ Log of significant changes. Updated after every full_feature or bug_fix merge.
 
 ## Example Entry
 
-### 2026-04-27 | feature | Add idempotency key support to payout API
+### 2026-04-27 | feature | Add idempotency key support to invoice API
 
 **Files Changed**:
-- handlers/payout.go
-- models/payout.go
+- handlers/invoice.go
+- models/invoice.go
 - migrations/add_idempotency_key.sql
-- tests/payout_test.go
+- tests/invoice_test.go
 
-**What Changed**: Payout API now requires Idempotency-Key header. Duplicate requests with same key are deduplicated and return cached response.
+**What Changed**: Invoice API now requires Idempotency-Key header. Duplicate requests with same key are deduplicated and return cached response.
 
 **Key Approach**:
-- Added `idempotency_key` column to payouts table (unique constraint)
+- Added `idempotency_key` column to invoices table (unique constraint)
 - Before processing, check if idempotency_key exists in DB
 - If exists, return cached response
 - If new, process and cache response
@@ -71,7 +71,7 @@ Log of significant changes. Updated after every full_feature or bug_fix merge.
 
 **Related Issues/PRs**:
 - Jira: FIN-123 "Add idempotency to payments"
-- PR: #456 "Idempotent payout processing"
+- PR: #456 "Idempotent invoice processing"
 
 ---
 

@@ -121,7 +121,7 @@ Layers and their purpose:
 
 [App-specific glossary. Example:]
 - **Optimistic Update** — UI state changes before API confirms; rollback on failure required
-- **Payout Cycle** — daily 24h window; affects which orders are editable
+- **Invoice Cycle** — daily 24h window; affects which orders are editable
 
 ## Run / Test / Build
 

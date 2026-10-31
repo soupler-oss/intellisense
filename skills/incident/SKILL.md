@@ -11,11 +11,6 @@ Abbreviated 4-step workflow for production incidents with mandatory financial sa
 **Escalation path**: Skip Steps 1-9 of normal workflow, go straight to: Diagnose → Fix → Safety checklist → Deploy
 **Time target**: <30 minutes from incident to deployment
 
-> **Planned skills, not yet built:** `/validate-api-contract`,
-> `/shared-table-impact`, `/sequence-plan` referenced below do not exist yet.
-> Until they do, do those checks **manually** (consumers via service-map.md,
-> deployment order by hand) — don't wait on a skill that isn't there.
-
 ## 4-Step Fast Path
 
 ### Step 1: Rapid Diagnosis (5 min)
@@ -24,7 +19,7 @@ Run `/diagnose` immediately (for money flows, apply the financial-impact gate be
 - Check logs, not guesses
 - Find root cause fast
 - Identify affected services
-- Estimate impact scope (e.g., "10% of payouts failing")
+- Estimate impact scope (e.g., "10% of invoices failing")
 
 If unclear after 5 min: Escalate to on-call engineer. Do NOT continue to Step 2.
 
@@ -62,7 +57,7 @@ Notify stakeholders immediately — do not wait for deployment.
 Owner: @your-name
 
 Example:
-[INCIDENT] orders-service: Account balance calculation errors affecting 15% of payouts. ETA: Fix deployed by 11:45 AM UTC
+[INCIDENT] orders-service: Account balance calculation errors affecting 15% of invoices. ETA: Fix deployed by 11:45 AM UTC
 ```
 
 **Update status page** (if customer-facing):
@@ -91,7 +86,7 @@ Example:
 
 4. **Is deployment order enforced for multi-service changes?**
    - [ ] Single service: N/A
-   - [ ] Multi-service: Confirmed deployment order with `/sequence-plan`
+   - [ ] Multi-service: Confirmed deployment order (from `/multi-service-plan`, or by hand from service-map.md)
 
 5. **What is the exact rollback sequence?**
    - [ ] Documented: Rollback SQL/commands in PR description (not just "revert commit")
@@ -121,7 +116,7 @@ git push -u origin hotfix/JIRA-123-account-cap-at-zero
 Accounts showing negative balances, causing reconciliation to fail.
 
 ## Hotfix
-Cap balance at zero to unblock payouts.
+Cap balance at zero to unblock invoices.
 
 ## Rollback Plan
 ```sql
@@ -168,8 +163,8 @@ Due: 2 days from now
 ## Skipped Steps
 - [ ] Full code review (run `/code-review`)
 - [ ] Test coverage analysis (must reach 95% financial paths)
-- [ ] Cross-repo validation (run `/validate-api-contract`)
-- [ ] Shared table validation (run `/shared-table-impact account_balances`)
+- [ ] Cross-repo validation (check each API consumer listed in service-map.md)
+- [ ] Shared table validation (check each reader and writer of the changed table, from service-map.md)
 - [ ] Root cause analysis (why did balances go negative? Fix that too)
 
 ## This Hotfix Was Temporary
@@ -209,7 +204,7 @@ Due: 2 days from now
 - Bug was just discovered, not actively breaking production
 - Customers aren't actively impacted
 - You have time for code review and testing
-- Multi-service changes required (need `/sequence-plan`)
+- Multi-service changes required (need `/multi-service-plan`)
 
 **ESCALATE instead of /incident if**:
 - You cannot diagnose the issue in 5 min

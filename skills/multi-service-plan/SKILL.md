@@ -15,13 +15,6 @@ Analyze a cross-service requirement into per-repo task breakdown with deployment
   - Example: "add reconciliation validation to payment processing"
 - Optional: Repo list if already known; if omitted, Step 0 discovers it
 
-> **Planned skills, not yet built:** `/validate-api-contract`,
-> `/shared-table-impact`, `/web-component-impact`, `/validate-shared-library`
-> referenced below do not exist yet. Until they do, perform each validation
-> **manually** (read the consuming repos via service-map.md and check the
-> contract/table/library by hand). Do not block on invoking a skill that
-> isn't there.
-
 ## Process (8 steps)
 
 0. **Discover affected repos** (if not already provided) — Read service-map.md. If its tables are empty (the shipped template), ask the user which repos are affected instead of guessing. Analyze requirement term by term against infrastructure/knowledge-base.md. Search codebase for keyword matches in CLAUDE.md Service definitions. Identify all repos reading/writing affected tables or consuming affected APIs. Rank by relevance: primary (direct), secondary (downstream), tertiary (shared config).
@@ -31,7 +24,7 @@ Analyze a cross-service requirement into per-repo task breakdown with deployment
 3. **Identify integration points** — How and Where do repos talk? Shared tables? API calls? Shared libraries?
 4. **Design per-repo tasks** — Break down requirement into repo-specific implementations
 5. **Determine deployment order** — Which repo deploys first? Which are blocking?
-6. **Identify pre-work validation** — Does this require `/validate-api-contract`, `/validate-shared-library`, `/web-component-impact`, `/shared-table-impact`?
+6. **Identify pre-work validation** — Which checks must happen before coding: an API contract's consumers, a shared table's readers and writers, a shared library's or component's consumers? List each consumer from service-map.md and the repos' CLAUDE.md, to be checked by hand.
 7. **Flag escalations** — Financial logic? Requires architect review? Shared library? Web Component?
 
 ## Output (REQUIRED FORMAT)
@@ -49,7 +42,7 @@ Analyze a cross-service requirement into per-repo task breakdown with deployment
 - **Files**: [model-files], [service-files], [handler-files]
 - **Tests**: [test-type-1], [test-type-2], [test-type-3] (N test cases)
 - **Dependencies**: Reads from [shared-table-name] (shared table)
-- **Pre-work**: Run `/shared-table-impact [table-name]` to confirm no unknown consumers
+- **Pre-work**: List every reader and writer of [shared-table-name] from service-map.md; confirm none is unknown
 - **Risk**: [risk-level] — [mitigation]. Flag for `/verify` and `/code-review` if high-risk changes.
 
 ### Repo 2: [service-b]
@@ -57,7 +50,7 @@ Analyze a cross-service requirement into per-repo task breakdown with deployment
 - **Files**: [model-files], [handler-files]
 - **Tests**: [test-type-1], [test-type-2] (N test cases)
 - **Dependencies**: Reads [service-a] API ([METHOD] [/path])
-- **Pre-work**: Run `/validate-api-contract [METHOD] [/path]` to check compatibility
+- **Pre-work**: Check every consumer of [METHOD] [/path] (CLAUDE.md API Contracts) still works with the change
 - **Risk**: API contract changed; [service-b] is downstream consumer
 
 ### Repo 3: [service-c]
@@ -65,7 +58,7 @@ Analyze a cross-service requirement into per-repo task breakdown with deployment
 - **Files**: [controller-files], [service-files]
 - **Tests**: [integration-test-type] (N test cases)
 - **Dependencies**: Calls [service-a] ([METHOD] [/path])
-- **Pre-work**: Already in `/validate-api-contract` check from [service-a]
+- **Pre-work**: Covered by the API consumer check for [service-a]
 
 ## Deployment Order
 1. Deploy [service-a] FIRST (provides new API endpoint or data)
@@ -85,7 +78,7 @@ Per-service rollback commands:
 - **[service-c]**: `git revert [commit] && [build-command]`
 
 Database rollback (if shared table migrations involved):
-- If [shared-table-name] altered: Restore from backup or run explicit rollback SQL (see `/shared-table-impact` report for exact SQL)
+- If [shared-table-name] altered: Restore from backup or run the migration's explicit rollback SQL
 
 **Time estimate**: Full rollback should complete in <10 minutes with database restore, <2 minutes without.
 
@@ -94,8 +87,8 @@ Database rollback (if shared table migrations involved):
 - [Data-source] in [service-a] → [Processing] in [service-a] → [Result] in [service-b] → Triggered from [service-c]
 
 ## Pre-Work Validation Required (After Deployment Plan)
-- [ ] `/shared-table-impact [table-name]` — confirms all consumers identified (for each shared table)
-- [ ] `/validate-api-contract [METHOD] [/path]` — confirms downstream compatibility (for each API contract change)
+- [ ] Every reader and writer of each shared table identified and checked
+- [ ] Every consumer of each changed API contract checked for compatibility
 - [ ] Architect review for [domain] logic design (if applicable)
 
 ## Success Criteria
@@ -107,7 +100,7 @@ Database rollback (if shared table migrations involved):
 
 ## Constraints
 1. Never assume deployment order — CLAUDE.md section is source of truth
-2. If shared table involved, the shared-table impact validation MUST complete first (manually, per the planned-skills note at top, until `/shared-table-impact` ships)
-3. If API contract changes, the API-contract validation MUST complete first (manually, per the planned-skills note at top, until `/validate-api-contract` ships)
+2. If a shared table is involved, its readers and writers MUST be checked first
+3. If an API contract changes, its consumers MUST be checked first
 4. Financial logic requires 95%+ test coverage — non-negotiable
 5. List ALL repos, not just the ones you plan to modify (read-only repos matter for validation)

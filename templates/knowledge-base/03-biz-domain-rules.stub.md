@@ -6,7 +6,7 @@
 <!-- TODO: Terms specific to this service and their definitions -->
 
 **Example** (payment service):
-- **payout_cycle**: Grouped collection of payments processed in one batch per day
+- **invoice_cycle**: Grouped collection of payments processed in one batch per day
 - **account_balance**: Current available balance in user's account (stored as int64 minor-currency-units)
 - **reconciliation**: Process of verifying account_balance matches SUM(transactions) for audit compliance
 - **idempotency_key**: Unique transaction_reference preventing duplicate charges on retry
@@ -18,9 +18,9 @@ Use this section to disambiguate terms that mean different things in different s
 <!-- TODO: Rules that enforce domain constraints -->
 
 **Example** (payment service):
-- Payout can only proceed if account_balance >= payout_amount
-- Once a payout is marked COMPLETED, it cannot be reversed (soft-delete only for audit)
-- Invoice generation must happen within 24 hours of payout completion
+- Invoice can only proceed if account_balance >= invoice_amount
+- Once a invoice is marked COMPLETED, it cannot be reversed (soft-delete only for audit)
+- Invoice generation must happen within 24 hours of invoice completion
 - Refunds require manual approval from finance team
 
 ## Financial Rules (CRITICAL if applicable)
@@ -28,7 +28,7 @@ Use this section to disambiguate terms that mean different things in different s
 <!-- TODO: Rules governing money handling, audits, compliance -->
 
 **Example**:
-- Balance mutations use SELECT FOR UPDATE: Prevents race conditions during concurrent payout
+- Balance mutations use SELECT FOR UPDATE: Prevents race conditions during concurrent invoice
 - All currency stored as int64 minor-currency-units: Prevents float rounding errors (e.g., 10.50 major units = 1050 minor units)
 - Idempotency key (transaction_reference) required: Ensures no duplicate charges on retry
 - Soft-delete only (no hard deletes): Maintains audit trail for regulatory compliance
@@ -38,7 +38,7 @@ Use this section to disambiguate terms that mean different things in different s
 
 <!-- TODO: State machines, approval processes, timing constraints -->
 
-**Example** (payout workflow):
+**Example** (invoice workflow):
 ```
 NEW → PENDING_RECONCILIATION → COMPLETED → INVOICED
 
@@ -54,6 +54,6 @@ Transitions:
 <!-- TODO: Who can do what with this service's data -->
 
 **Example**:
-- User can view only their own payout history
-- Finance team can view all payouts and export for accounting
-- Admin can cancel payouts with approval from CFO
+- User can view only their own invoice history
+- Finance team can view all invoices and export for accounting
+- Admin can cancel invoices with approval from CFO

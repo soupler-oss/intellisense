@@ -66,7 +66,7 @@ Intellisense-Version: <version>
 
 | Trailer | When | Example |
 |---------|------|---------|
-| `Intellisense-Version` | every Claude commit | `Intellisense-Version: 1.0.0` (read `version` from `~/.claude/config.json`) |
+| `Intellisense-Version` | every Claude commit | `Intellisense-Version: 1.0.1` (read `version` from `~/.claude/config.json`) |
 | `Intellisense-Metadata` | every Claude commit | single generated line (see below) |
 | task trailer | Tier 1+, on every commit | a key from `evidence.task_trailers` in `.intellisense.yml`: `Task: PROJ-12`, `Refs: #123`, `Beads: intellisense-abc123` |
 | `Change Contract` | Tier 1+, once per change | `Change Contract: scope=…, risk=…`, or the committed `.intellisense/contracts/<branch>.md` written by `/contract` |
@@ -79,7 +79,7 @@ feat: add idempotency check for balance deduction
 
 Prevents duplicate deductions when the same request is retried.
 
-Intellisense-Version: 1.0.0
+Intellisense-Version: 1.0.1
 Task: FN-123
 Change Contract: scope=idempotent balance deduction, risk=high, confidence=0.85
 ```
@@ -118,7 +118,7 @@ Format: `<type>/<BOARD>-<TICKET>-intellisense-<description>`
 Examples:
 - `feat/FN-123-intellisense-idempotency-check-balance-deduction`
 - `fix/FN-456-intellisense-tax-calculation-credit-notes`
-- `refactor/MD-789-intellisense-extract-payout-cycle-validation`
+- `refactor/PROJ-789-intellisense-extract-invoice-cycle-validation`
 
 ---
 

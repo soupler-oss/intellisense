@@ -26,7 +26,7 @@ Non-obvious issues discovered in production or development. Avoid repeating them
 
 **When it occurs**:
 - High concurrency on the same user's account
-- Two payout requests arrive within milliseconds of each other
+- Two invoice requests arrive within milliseconds of each other
 - No SELECT FOR UPDATE on balance check
 
 **How to avoid**:
@@ -45,10 +45,10 @@ Non-obvious issues discovered in production or development. Avoid repeating them
 
 **If it happens**:
 1. Query transaction log: `SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC`
-2. Identify duplicate payout
-3. Reverse one payout with credit transaction
+2. Identify duplicate invoice
+3. Reverse one invoice with credit transaction
 4. Notify user of accidental double-deduction
-5. Add regression test (concurrent payouts on same user)
+5. Add regression test (concurrent invoices on same user)
 
 ---
 
@@ -121,7 +121,7 @@ Non-obvious issues discovered in production or development. Avoid repeating them
 
 ## Gotcha 4: Migration Lock on High-Traffic Table
 
-**Description**: Long-running migration locks `account_balances` table. Reads timeout. User-facing payout requests fail.
+**Description**: Long-running migration locks `account_balances` table. Reads timeout. User-facing invoice requests fail.
 
 **When it occurs**:
 - ALTER TABLE on high-traffic table during business hours
@@ -141,7 +141,7 @@ Non-obvious issues discovered in production or development. Avoid repeating them
 **If it happens**:
 1. Kill migration: `KILL <migration_query_id>;`
 2. Rollback to previous schema: `ALTER TABLE ... ADD/DROP ...` (reverse the change)
-3. Verify payout requests resume (latency should drop)
+3. Verify invoice requests resume (latency should drop)
 4. Re-run migration during low-traffic window with online tool
 5. Alert ops to schedule future migrations outside peak hours
 
@@ -195,7 +195,7 @@ Non-obvious issues discovered in production or development. Avoid repeating them
 4. Use `SELECT deleted_at, COUNT(*) GROUP BY` to catch scope bypasses
 
 **If it happens**:
-1. Search codebase for raw SQL queries: `grep -r "SELECT.*FROM payouts" --include="*.go"`
+1. Search codebase for raw SQL queries: `grep -r "SELECT.*FROM invoices" --include="*.go"`
 2. Add `WHERE deleted_at IS NULL` to queries missing it
 3. Add regression test: delete record, verify not in response
 4. Run full test suite (should catch any newly broken tests)
