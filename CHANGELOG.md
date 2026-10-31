@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- README: each example is a full scenario — the situation, what intellisense does (with real output) and how to set
+  it up. "Two ways to use it" explains why Live mode needs Claude Code and which slash commands Core mode can install.
+
+### Fixed
+- README: a comment-only edit is routine only outside risky paths; the README had said "even in a risky file".
+- `docs/ci.md` pins the GitHub Action at `@v1.0.0`; it named a version that does not exist.
+
 ## [1.0.0] - 2026-10-31
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**
