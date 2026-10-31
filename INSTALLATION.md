@@ -8,7 +8,7 @@
 > intellisense live install                     # Live mode: live checks inside Claude Code, every repository on this machine
 > ```
 >
-> Windows: `winget install Soupler.Intellisense`, or `scoop bucket add soupler https://github.com/soupler-oss/scoop-bucket && scoop install intellisense` (Core mode; Live mode needs WSL).
+> Windows: `scoop bucket add soupler https://github.com/soupler-oss/scoop-bucket && scoop install intellisense` (Core mode; Live mode needs WSL).
 > With Go: `go install github.com/soupler-oss/intellisense/cmd/intellisense@latest`. Run `intellisense` anywhere to see what to do next.
 >
 > The rest of this guide installs Live mode **from a git checkout** with `setup.sh` — the path for contributors to

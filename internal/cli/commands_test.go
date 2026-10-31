@@ -50,7 +50,7 @@ func TestHelpForEveryCommand(t *testing.T) {
 	}
 }
 
-func TestInitYesWritesVersion2AndTrackerTrailers(t *testing.T) {
+func TestInitYesWritesPolicyAndTrackerTrailers(t *testing.T) {
 	e := newEnv(t)
 	code, out := e.run("init", "--yes", "--no-hook", "--tracker", "jira", "--skills", "plan,tdd")
 	if code != ExitOK || !strings.Contains(out, "Next:") {

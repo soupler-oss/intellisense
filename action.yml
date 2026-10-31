@@ -33,7 +33,7 @@ runs:
     # Built from this action's own source at the pinned ref, so what runs is exactly what you reviewed.
     - uses: actions/setup-go@v5
       with:
-        go-version-file: ${{ github.action_path }}/go.mod
+        go-version: stable
         cache: false
 
     - name: Build intellisense

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0]
+## [1.0.0] - 2026-10-31
 
 Risk tiers, evidence gates and shared rules for coding agents, in two modes that share one tier engine: **Core mode**
 (per repository, any agent) and **Live mode** (Claude Code, at edit time).
@@ -48,3 +48,8 @@ Risk tiers, evidence gates and shared rules for coding agents, in two modes that
   Homebrew formula, a Scoop manifest and winget manifests built by the release workflow and attached to every
   release.
 - **repo-governance integration**: a pre-push hook that already runs `intellisense gate` counts as installed.
+- **Builds**: release binaries for macOS, Linux and Windows (amd64/arm64) are built with the current stable Go, and
+  text files check out with LF line endings on every platform (`.gitattributes`).
+- **Documentation layers** for this repository (`docs/L0-foundation` … `docs/L7-forensics`): L2-001 product overview,
+  L3-001 system architecture with ADR-001–006, L4-001 local setup, L4-002 release runbook, and the L6 → L6.1 → L7
+  remediation chain for security reports and review findings.

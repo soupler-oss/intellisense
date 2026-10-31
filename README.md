@@ -2,164 +2,215 @@
 
 # Intellisense
 
-### Every AI-written change carries the evidence its risk needs.
+### A safety check for code written with AI.
 
-**Risk tiers, evidence gates and shared rules for Claude Code, Codex, GitHub Copilot and Cursor, enforced at `git push` and in CI.**
+**Small changes go straight through. Risky ones — payments, logins, database changes — need a ticket and a short note
+before they can be pushed. It works the same for Claude Code, Codex, GitHub Copilot and Cursor.**
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2C4BFF)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-2C4BFF)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/go-%E2%89%A5%201.22-00ADD8)](go.mod)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555)](#install)
 
-**[Policy reference](docs/policy.md)** · **[Agents](docs/agents.md)** · **[CI](docs/ci.md)** · **[Live mode](docs/live-mode.md)** · **[Changelog](CHANGELOG.md)**
-
-[Quick start](#quick-start) · [What you get](#what-you-get) · [See it work](#see-it-work) · [How it works](#how-it-works) · [Two modes](#two-modes) · [Commands](#commands) · [FAQ](#faq) · [Documentation](#documentation)
+[What it does](#what-it-does) · [Examples](#examples) · [Get started](#get-started-in-5-minutes) · [Words we use](#words-we-use) · [Two ways to use it](#two-ways-to-use-it) · [Reference](#reference) · [FAQ](#faq)
 
 </div>
 
 <br />
 
-Coding agents write a lot of code quickly, and they all treat a typo fix and a change to your payment code with the same confidence. Each agent has its own instruction file, so the rules drift: `CLAUDE.md` says one thing, `AGENTS.md` another, and Copilot was never told. A plan and passing tests are things a reviewer has to take on trust.
+## The problem
 
-`intellisense` gives every change in a repository a **risk tier** and blocks a push or pull request that lacks the evidence that tier needs:
+AI coding assistants write code fast. They fix a typo and rewrite your payment logic with exactly the same
+confidence, and nobody checks which one just happened.
 
-- **Tier 2 (high risk):** auth, money, migrations, secrets and the governance policy itself. Needs a task reference and a change contract.
-- **Tier 1 (standard):** CI, infrastructure, dependencies, agent instructions and ordinary code. Same evidence, set per repository.
-- **Tier 0 (routine):** docs, tests and comment-only edits. Nothing extra.
+On top of that, each assistant reads its own instruction file — `CLAUDE.md` for Claude, `AGENTS.md` for Codex,
+another file for Copilot, another for Cursor. Over time they drift apart, and each assistant follows different rules.
 
-The same rules are then written into **every agent's own instruction format** from one source, so Claude, Codex, Copilot and Cursor all follow the same workflow. The gate runs in git and CI, so it holds whichever agent (or person) wrote the code.
+## What it does
 
-It is one Go binary with no runtime dependencies besides `git`.
+Intellisense is a small command-line tool you add to a repository. It does three things:
 
-## Quick start
+1. **Sorts every change by risk.** It looks at which files a change touches and gives it a level:
+   - **Routine** — docs, tests, comments. Nothing extra needed.
+   - **Standard** — ordinary code, CI, dependencies.
+   - **High risk** — logins, payments, database migrations, secrets.
+2. **Asks for proof on the risky ones.** A standard or high-risk change needs two things in its commit message:
+   a **ticket number** (which task is this for?) and a one-line **change note** (what does it touch, how risky is it?).
+   If they are missing, the push is stopped and you are told exactly what to add.
+3. **Gives every AI assistant the same rules.** You write your team's rules once; Intellisense writes them into each
+   assistant's own file and warns you when someone edits one by hand.
 
-```bash
-brew install soupler-oss/tap/intellisense    # or see Install below
-cd your-repo
-intellisense                 # where am I, and what should I run next?
-intellisense init            # a few questions, then: policy, rules, agent instructions, push hook, CI check
-intellisense doctor          # checks everything is in place (--fix repairs it)
+The check runs when you `git push` and again on every pull request in CI, so it applies to every change — whoever
+or whatever wrote it. It's one program with nothing else to install besides `git`.
+
+## Examples
+
+**1. The assistant fixes a typo in the README.** <br />
+Routine change. You push, it goes through. No extra steps.
+
+**2. The assistant changes the payment code.** <br />
+High risk. The push stops:
+
+```console
+$ git push
+intellisense gate: Tier 2 — high risk
+  ✗ commit 894b196 "feat: refund flow" is Tier 2 and has no task trailer
+      fix: add a trailer line such as "Task: PROJ-123" to that commit's message
+  ✗ this change is Tier 2 and has no change contract
+      fix: add a line "Change Contract: scope=<scope>, risk=low|medium|high" to a commit message
+BLOCKED: 2 problem(s).
 ```
 
-`init` detects your stack, asks which agents and task tracker you use, writes `.intellisense.yml`, and tells you how to commit the result (`--yes` accepts the defaults without asking). It changes nothing outside the repository. Every command ends with what to run next, and `intellisense help <command>` explains it with examples. Adopting is itself a Tier 2 change, so the first commit shows the evidence format:
+You add the ticket and the note to the commit, and the push goes through:
+
+```console
+$ git commit --amend -m "feat: refund flow" -m "Task: PROJ-12" \
+    -m "Change Contract: scope=refund flow in payments, risk=high"
+$ git push
+PASSED
+```
+
+Now the reviewer knows which ticket the change belongs to and that its author called it high risk.
+
+**3. Your team uses Claude Code and Copilot.** <br />
+You add a rule like "never log card numbers" once. Both assistants get it, each in its own format.
+
+**4. Someone skips the local check with `git push --no-verify`.** <br />
+The same check runs on the pull request in GitHub, and it's a required check, so the pull request can't be merged
+until it passes.
+
+**5. A pull request tries to relax the rules.** <br />
+CI judges every pull request by the rules on the branch it's merging *into*, not by the rules inside the pull request.
+And changing the rules file is itself a high-risk change.
+
+**6. The assistant only rewords a code comment.** <br />
+Treated as routine, even in a risky file — unless the comment turns something off, like a lint rule or a security
+check.
+
+## Who it's for
+
+- **Teams where AI writes part of the code** and risky changes should arrive with a ticket and a stated risk —
+  enforced, not just hoped for.
+- **Tech leads** who want one set of rules for every AI assistant the team uses.
+- **Solo developers** who want a second look on the dangerous parts of their own code.
+
+## Get started in 5 minutes
+
+**1. Install it**
+
+```bash
+brew install soupler-oss/tap/intellisense
+```
+
+Other ways (Linux without Homebrew, Windows, Go) are under [Install](#install).
+
+**2. Set it up in your repository**
+
+```bash
+cd your-repo
+intellisense init
+```
+
+It asks a few questions — your language, which AI assistants you use, your ticket system (GitHub, Jira, Linear, or
+none) — and then writes:
+
+- `.intellisense.yml` — your rules: which files are risky and what they need
+- instruction files for each AI assistant you chose
+- a git hook that runs the check on every push
+- optionally, a GitHub workflow that runs it on every pull request
+
+It changes nothing outside the repository. `--yes` skips the questions and uses the defaults.
+
+**3. Commit the setup**
+
+Adding Intellisense is itself a high-risk change (it adds rules), so your first commit already shows the format:
 
 ```bash
 git add -A
-git commit -m "chore: adopt intellisense governance" \
+git commit -m "chore: adopt intellisense" \
   -m "Task: PROJ-1" \
-  -m "Change Contract: scope=adopt intellisense, risk=low, confidence=0.9"
+  -m "Change Contract: scope=adopt intellisense, risk=low"
+git push
 ```
 
-### Install
+**4. Work as usual**
+
+When you're unsure, run `intellisense` on its own: it shows what's set up and what to do next. Every command ends with
+a "Next:" hint, and `intellisense help <command>` explains any command with examples.
+
+## Words we use
+
+| Word | In plain terms |
+|---|---|
+| **Tier** | The risk level of a change: 0 = routine, 1 = standard, 2 = high risk. You can add more or rename them. |
+| **Task reference** (trailer) | A line like `Task: PROJ-12` or `Refs: #42` at the end of a commit message, linking it to a ticket. |
+| **Change contract** | A one-line note in the commit — `Change Contract: scope=…, risk=low/medium/high` — or a short Markdown file, saying what the change touches and how risky it is. |
+| **Gate** | The check itself. It runs on `git push` and in CI, and blocks changes that are missing what their tier needs. |
+| **Policy** | `.intellisense.yml`, the file that says which paths are which tier and what each tier needs. |
+| **Rules** | Guidance for the AI assistants (security, testing, style, your language), kept in `.intellisense/rules/` and copied into each assistant's file. |
+
+## Two ways to use it
+
+| | **Core mode** — start here | **Live mode** — for Claude Code teams |
+|---|---|---|
+| Set up with | `intellisense init` in each repository | `intellisense live install` once per computer |
+| Works with | Any AI assistant, or none | Claude Code |
+| Checks happen | When you push, and in CI | Also *while* Claude is editing: a risky edit waits until a change note is approved |
+| Extras | — | 19 slash commands (`/plan`, `/tdd`, `/verify`, …), design helpers, optional usage tracking |
+
+Both use the same rules and the same risk levels, so an edit, a push and CI always agree. Live mode is described in
+[docs/live-mode.md](docs/live-mode.md).
+
+## Install
 
 ```bash
-brew install soupler-oss/tap/intellisense                                          # macOS, Linux
-curl -fsSL https://raw.githubusercontent.com/soupler-oss/intellisense/main/install.sh | sh   # any Unix, no Homebrew
-scoop bucket add soupler https://github.com/soupler-oss/scoop-bucket && scoop install intellisense   # Windows
-winget install Soupler.Intellisense                                                # Windows
-go install github.com/soupler-oss/intellisense/cmd/intellisense@latest             # with Go 1.22+
+brew install soupler-oss/tap/intellisense                                                         # macOS, Linux
+curl -fsSL https://raw.githubusercontent.com/soupler-oss/intellisense/main/install.sh | sh         # any Unix, no Homebrew
+scoop bucket add soupler https://github.com/soupler-oss/scoop-bucket && scoop install intellisense  # Windows
+go install github.com/soupler-oss/intellisense/cmd/intellisense@latest                            # with Go 1.22+
 ```
 
-`install.sh` checks the download against the release's `checksums.txt` and installs to `/usr/local/bin` (or `~/.local/bin`). Binaries for macOS, Linux and Windows (amd64/arm64) are also on the [releases](https://github.com/soupler-oss/intellisense/releases) page. Each release also publishes the Homebrew formula, the Scoop manifest and the winget manifests it was packaged with. Step-by-step: [INSTALLATION.md](INSTALLATION.md).
+`install.sh` checks the download against the release's `checksums.txt` and installs to `/usr/local/bin` (or
+`~/.local/bin`). Ready-made downloads for macOS, Linux and Windows (Intel and ARM) are on the
+[releases](https://github.com/soupler-oss/intellisense/releases) page. Step by step: [INSTALLATION.md](INSTALLATION.md).
 
-## What you get
+---
+
+## Reference
+
+The rest of this page is for setting it up in detail.
+
+### What's included
 
 | | |
 |---|---|
-| **Risk tiers from paths** | `.intellisense.yml` maps paths to tiers with regular expressions. Defaults cover auth, money, migrations, secrets, CI, infrastructure, dependencies and agent instructions. Tiers are a list: add a Tier 3, rename one, or change what each needs. |
-| **Evidence you choose** | Per tier: a task trailer on each commit, a change contract, a changed test. Task references can be checked against GitHub, Jira, Linear or Beads. |
-| **Contracts with a schema** | A contract is a commit line or a Markdown file (`intellisense contract new`), validated against the fields your policy defines. |
-| **A gate that blocks the push** | The pre-push hook refuses a push whose Tier 1+ commits lack their task trailer, or whose change lacks a contract, and says exactly how to fix it. |
-| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.0`) runs it on every pull request, with annotations and a job summary. It judges the PR by the policy on the **base** branch, so a PR cannot loosen its own rules. |
+| **Risk tiers from paths** | `.intellisense.yml` maps file paths to tiers with patterns. Defaults cover auth, money, migrations, secrets, CI, infrastructure, dependencies and agent instructions. Tiers are a list: add a Tier 3, rename one, or change what each needs. |
+| **Evidence you choose** | Per tier: a task reference on each commit, a change contract, a changed test. Task references can be checked against GitHub, Jira, Linear or Beads. |
+| **Contracts with a schema** | A contract is a commit line or a Markdown file (`intellisense contract new`), checked against the fields your policy defines. |
+| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.0`) runs it on every pull request, with annotations and a job summary. |
 | **One rule set, four agents** | `intellisense sync` writes `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` plus scoped `.github/instructions/`, and `.cursor/rules/`, all from `.intellisense/rules/`. CI fails when they drift. |
-| **Rules worth following** | Security and reasoning-integrity baselines, coding style, testing, proof standards, AI-regression patterns, and rules for Go, PHP/Laravel, Angular, React, Node, Python, Java, Flutter, Rust, C#, Ruby, Swift and C/C++. Add your own language with `custom_stacks`. |
-| **No ceremony for safe edits** | A default-tier file whose diff only touches comments drops to Tier 0, unless the comment disables or bypasses something. |
-| **Your own rules** | Files in `.intellisense/rules/organization/` reach every agent, optionally scoped to paths. Edit a built-in rule and updates keep your version; switch one off with `rules.disable`. |
+| **Rules worth following** | Security and reasoning baselines, coding style, testing, and rules for Go, PHP/Laravel, Angular, React, Node, Python, Java, Flutter, Rust, C#, Ruby, Swift and C/C++. Add your own language with `custom_stacks`. |
+| **Your own rules** | Files in `.intellisense/rules/organization/` reach every agent, optionally only for some paths. Edit a built-in rule and updates keep your version; switch one off with `rules.disable`. |
 | **Claude Code skills** | `/plan`, `/tdd`, `/verify`, `/security-scan` and more, installed per repository with `skills:`. |
 
-## See it work
-
-A branch that adds a login handler, pushed without evidence:
-
-```console
-$ git push origin feat/login
-── feat/login
-intellisense gate: Tier 2 — high risk
-  policy   .intellisense.yml @ 18adcc6
-  range    18adcc6..894b196  (1 commits, 1 files)
-  requires a task trailer on each Tier 1+ commit (Task/Refs/Beads) + a change contract
-  Tier 2 because:
-    internal/auth/login.go                           auth/identity
-  ✗ commit 894b196 "feat: login" is Tier 2 and has no task trailer
-      fix: add a trailer line such as "Task: PROJ-123" to that commit's message (accepted keys: Task, Refs, Beads), then `git commit --amend` (or `git rebase -i` for older commits)
-  ✗ this change is Tier 2 and has no change contract
-      fix: add a line "Change Contract: scope=<scope>, risk=low|medium|high" to a commit message, or run `intellisense contract new "<title>"` and commit the file it writes under .intellisense/contracts/
-BLOCKED: 2 problem(s). A false positive? Adjust the rules in .intellisense.yml rather than skipping the gate.
-
-Next:
-  git commit --amend                    add the task trailer (for an older commit: git rebase -i)
-  intellisense contract new "<title>"   write or fix the change contract
-  intellisense gate                     check again
-error: failed to push some refs to '../remote.git'
-```
-
-The same commit with its evidence:
-
-```console
-$ git commit --amend -m "feat: login" -m "Task: PROJ-12" -m "Change Contract: scope=login handler, risk=high, confidence=0.8"
-$ git push origin feat/login
-  ...
-  contract found in commit 4a0cf72
-PASSED
- * [new branch]      feat/login -> feat/login
-```
-
-Rewording a comment in ordinary code needs nothing:
-
-```console
-$ intellisense classify
-Tier 0 — routine (docs, tests, comments)
-  Tier 0  internal/greet/greet.go                          fast-lane diff only changes comments
-```
-
-And an agent instruction file edited by hand, instead of through the rules, fails CI:
-
-```console
-$ intellisense sync --check
-agent instructions are out of date; run `intellisense sync`:
-  changed   .github/copilot-instructions.md
-```
-
-## How it works
+### How it decides
 
 ```mermaid
 flowchart LR
-    P[".intellisense.yml<br/>tiers · evidence · agents"] --> W["workflow.md<br/>(generated)"]
-    R[".intellisense/rules/<br/>baseline · operational · stack · organization"] --> S["intellisense sync"]
-    W --> S
-    S --> C["CLAUDE.md"] & X["AGENTS.md"] & G[".github/copilot-instructions.md<br/>.github/instructions/*"] & U[".cursor/rules/*.mdc"]
-    P --> T["tier engine<br/>path rules · fast lane · floor"]
-    T --> H["pre-push hook"] & A["GitHub Action"]
-    H & A --> E{"evidence?<br/>task trailer per commit<br/>change contract"}
-    E -->|yes| OK["push / merge"]
+    P[".intellisense.yml<br/>tiers · evidence · agents"] --> T["tier engine"]
+    R[".intellisense/rules/"] --> S["intellisense sync"]
+    S --> C["CLAUDE.md"] & X["AGENTS.md"] & G["Copilot instructions"] & U["Cursor rules"]
+    T --> H["git push"] & A["pull request (CI)"]
+    H & A --> E{"ticket + change note<br/>present?"}
+    E -->|yes| OK["goes through"]
     E -->|no| NO["blocked, with the fix"]
 ```
 
-Each file gets a tier from the first rule it matches, checking the tiers from the highest level down; a file no rule matches gets `default_tier`. The change's tier is the highest file tier, raised to `minimum_tier`. Every commit that is Tier 1+ by its own changes carries its own task trailer: one commit's trailer never covers another. The full model and every key are in the [policy reference](docs/policy.md).
+Each file gets the tier of the first rule it matches, checking the highest tier first; a file nothing matches gets
+`default_tier`. The change's tier is its highest file tier. Every commit that is Tier 1+ on its own carries its own
+task reference — one commit's reference never covers another. Every key is in the [policy reference](docs/policy.md).
 
-## Two modes
-
-| | **Core mode** (`intellisense init`) | **Live mode** (`intellisense live install`) |
-|---|---|---|
-| For | Any agent, any team, one repository at a time | Teams using Claude Code |
-| Installs | Files in the repo + a git hook. Nothing global | `~/.intellisense`, linked into `~/.claude/` for every session |
-| Tiers and evidence | At push and in CI | Also live: each prompt is classified, and a risky edit waits for an approved contract |
-| Rules | Portable rules, in each agent's native format | All rules, plus 19 slash-command skills and architect agents |
-| Optional extras | — | Commit metadata, telemetry, code-review graph, Beads — each only if you choose it |
-
-There is one tier engine: Live mode's hooks ask the same Go binary, which reads each repository's `.intellisense.yml`, so an edit, a push and CI always agree. Live mode is documented in [docs/live-mode.md](docs/live-mode.md).
-
-## Commands
+### Commands
 
 ```bash
 intellisense                                    # status: what is set up, and what to run next
@@ -183,84 +234,92 @@ Exit codes: `0` passed, `1` blocked or out of date, `2` error.
 ## FAQ
 
 <details>
-<summary><strong>Who is this for?</strong></summary>
+<summary><strong>Does it slow everyone down?</strong></summary>
 
-Teams whose code is partly written by coding agents (Claude Code, Codex, Copilot, Cursor) and who want risky changes to arrive with a task and a stated scope and risk, enforced rather than hoped for. Core mode suits any team and any agent; Live mode adds live checks for teams on Claude Code.
+Routine changes — docs, tests, comment edits — need nothing. Only changes to the paths you mark as risky ask for a
+ticket and a note, and the error message tells you the exact line to add.
 </details>
 
 <details>
-<summary><strong>Can I skip the gate?</strong></summary>
+<summary><strong>Can I skip the check?</strong></summary>
 
-`git push --no-verify` skips the local hook, but CI runs the same gate and is a required check. A wrong tier is fixed in `.intellisense.yml`, and since that file is Tier 2, the fix needs its own evidence and review.
+`git push --no-verify` skips it on your machine, but CI runs the same check and can be made required. If a file is in
+the wrong tier, fix it in `.intellisense.yml` — that change is high risk itself, so it gets reviewed.
 </details>
 
 <details>
-<summary><strong>We use Jira / Linear / GitHub issues, not Beads.</strong></summary>
+<summary><strong>We use Jira / Linear / GitHub issues.</strong></summary>
 
-Pick your tracker at `init` (`--tracker jira`): it sets the trailer keys (`Jira: PROJ-12`), and `evidence.verify_tasks: true` checks each reference exists. Beads is never required, in either mode.
+Pick your tracker at `init` (`--tracker jira`). It sets the line format (`Jira: PROJ-12`), and
+`evidence.verify_tasks: true` checks that each ticket really exists.
 </details>
 
 <details>
 <summary><strong>Does it read my code or send anything anywhere?</strong></summary>
 
-Core mode makes no network call unless you turn on `verify_tasks`, which asks your own tracker about task IDs. Telemetry exists only in Live mode, is off unless you configure a collector, and sends counts, never content ([contract](docs/telemetry-contract.md)).
+Core mode makes no network calls unless you turn on `verify_tasks`, which asks your own tracker about ticket IDs.
+Usage tracking exists only in Live mode, is off unless you set it up, and sends counts, never code
+([details](docs/telemetry-contract.md)).
 </details>
 
 <details>
 <summary><strong>Will it overwrite my changes?</strong></summary>
 
-No. `rules update` and `live templates update` refresh only files you have not edited and list the ones they kept; `--force` replaces them, keeping a backup. `.intellisense/rules/organization/` is never touched.
-</details>
-
-<details>
-<summary><strong>Does it work with repo-governance?</strong></summary>
-
-Yes. [repo-governance](https://github.com/soupler-oss/repo-governance) governs a repository's docs, branches and PRs; intellisense governs the risk of each code change. With `features.intellisense` on, repo-governance installs the pre-push hook and the CI check that run the gate, makes "Intellisense Gate" a required check, and runs `intellisense init` for each repository it generates.
+No. Updates refresh only files you haven't edited and list the ones they kept; `--force` replaces them and keeps a
+backup. `.intellisense/rules/organization/` is never touched.
 </details>
 
 <details>
 <summary><strong>What about monorepos?</strong></summary>
 
-Tier rules are path patterns, so `services/payments/` and `apps/web/` can carry different tiers. Organization rules can be scoped to paths with `globs:`.
+Tiers are path patterns, so `services/payments/` and `apps/web/` can carry different tiers, and your own rules can be
+limited to some paths.
 </details>
 
 <details>
-<summary><strong>Which agents read what?</strong></summary>
+<summary><strong>Does it work with repo-governance?</strong></summary>
 
-See [docs/agents.md](docs/agents.md): what each file contains, size limits, and how scoping works per agent.
+Yes. [repo-governance](https://github.com/soupler-oss/repo-governance) sets up a repository's docs, branches and
+pull-request checks; Intellisense checks the risk of each code change. With `features.intellisense` on,
+repo-governance installs the hook and the CI check for you.
 </details>
 
-## Status
+<details>
+<summary><strong>Other CI systems?</strong></summary>
 
-**1.0**: configurable risk tiers and contracts, one tier engine for both modes, optional integrations, and a guided command line. CI runs the Go suite on macOS, Linux and Windows and the Bash suite on macOS and Linux for every change. Release notes are in the [CHANGELOG](CHANGELOG.md).
-
-- The CI check ships as a GitHub Action. On other CI systems, run `intellisense check --base <ref> --head <ref>` in a job: it exits `1` when the change is blocked.
-- Live mode needs bash (macOS, Linux or WSL) and Claude Code. Core mode runs anywhere `git` does, Windows included.
-- Live mode's optional extras (Beads, code-review-graph, telemetry) are separate tools, installed only if you choose them.
+Run `intellisense check --base <ref> --head <ref>` in a job: it exits `1` when the change is blocked. See
+[docs/ci.md](docs/ci.md).
+</details>
 
 ## Documentation
 
-- **[Policy reference](docs/policy.md)**: tiers, evidence, the contract schema, stacks, rules and integrations; every key in `.intellisense.yml`
-- **[Agents](docs/agents.md)**: what each agent's instruction file contains, and how scoping works
-- **[CI](docs/ci.md)**: the GitHub Action, other CI systems, and making the gate a required check
-- **[Live mode](docs/live-mode.md)**: live checks inside Claude Code, per-repository rules and templates, optional tools
-- **[Installation](INSTALLATION.md)** and **[Quick start](QUICK_START.md)**: step by step, for both modes
+- **[Quick start](QUICK_START.md)** and **[Installation](INSTALLATION.md)** — step by step
+- **[Policy reference](docs/policy.md)** — every setting in `.intellisense.yml`
+- **[Agents](docs/agents.md)** — what each AI assistant's file contains
+- **[CI](docs/ci.md)** — the GitHub Action and other CI systems
+- **[Live mode](docs/live-mode.md)** — live checks inside Claude Code
 - **[Changelog](CHANGELOG.md)**
+
+How intellisense itself is built and run — product requirements, architecture decisions, the release runbook — is in
+the documentation layers under [`docs/`](docs/): [L2 product](docs/L2-product/), [L3 architecture](docs/L3-architecture/),
+[L4 release and setup](docs/L4-infrastructure/), and [L6/L7 remediation](docs/L6-remediation/).
 
 ## Contributing
 
-Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and [CLAUDE.md](CLAUDE.md) before changing anything: it explains the architecture and the rules for this repository. Branch from `develop` and open the pull request against `develop`; `main` only receives `develop`. Questions go to [Discussions](https://github.com/soupler-oss/intellisense/discussions), security problems to [SECURITY.md](SECURITY.md), and everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-This repository is governed by its own gate (its `.intellisense.yml`) and by [repo-governance](https://github.com/soupler-oss/repo-governance)'s docs gate, hooks and PR checks.
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and [CLAUDE.md](CLAUDE.md) before
+changing anything. Branch from `develop` and open the pull request against `develop`. Questions go to
+[Discussions](https://github.com/soupler-oss/intellisense/discussions), security problems to [SECURITY.md](SECURITY.md),
+and everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ```bash
 bash bin/install-hooks.sh          # once per clone
 bash scripts/ci/test.sh            # Go and Bash suites, as CI runs them
 bash scripts/ci/lint.sh            # gofmt, go vet, bash -n, JSON
-bash bin/statutory-integrity.sh    # the docs gate CI runs
-go run ./cmd/intellisense classify # the tier of your change, before you commit
+bash bin/statutory-integrity.sh    # the docs check CI runs
 ```
 
 ## License
 
-Copyright 2026 Soupler. [Apache License 2.0](LICENSE); see also [`NOTICE`](NOTICE). Contributions are accepted under the same licence. **What it writes is yours:** the licence places no restriction on the policy files, contracts and agent instructions intellisense writes into your repositories. The licence doesn't grant use of the Soupler name or logo.
+Copyright 2026 Soupler. [Apache License 2.0](LICENSE); see also [`NOTICE`](NOTICE). **What it writes is yours:** the
+licence places no restriction on the policy files, contracts and instructions Intellisense writes into your
+repositories. The licence doesn't grant use of the Soupler name or logo.

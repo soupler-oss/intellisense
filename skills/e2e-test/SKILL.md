@@ -219,14 +219,14 @@ describe('User Registration', () => {
   it('creates user and navigates to login', (done) => {
     fixture.componentInstance.form.patchValue({
       email: 'newuser@example.com',
-      password: 'SecurePass123!'
+      password: 'SecurePass123!'  // intellisense:allow-secret (test fixture)
     });
     fixture.componentInstance.submit();
 
     fixture.whenStable().then(() => {
       expect(mockUserAPI).toHaveBeenCalledWith({
         email: 'newuser@example.com',
-        password: 'SecurePass123!'
+        password: 'SecurePass123!'  // intellisense:allow-secret (test fixture)
       });
       expect(fixture.componentInstance.router.navigate).toHaveBeenCalledWith(['/login']);
       done();
@@ -238,7 +238,7 @@ describe('User Registration', () => {
 
     fixture.componentInstance.form.patchValue({
       email: 'existing@example.com',
-      password: 'SecurePass123!'
+      password: 'SecurePass123!'  // intellisense:allow-secret (test fixture)
     });
     fixture.componentInstance.submit();
 

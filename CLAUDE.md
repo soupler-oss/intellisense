@@ -170,12 +170,25 @@ intellisense/
 ├── action.yml                 — the GitHub Action (runs `intellisense check`)
 ├── .intellisense.yml          — this repo's own policy (it gates itself)
 ├── tests/                     — Bash test suite (Live mode)
-├── docs/                      — WORKFLOW.md, CODE-REVIEW-GRAPH-INTEGRATION.md, etc.
+├── docs/                      — user docs (policy.md, agents.md, ci.md, live-mode.md, …) and the layers:
+│                                L0 standards, L2 product, L3 architecture + ADRs, L4 setup + release, L6/L6.1/L7 remediation
 ├── setup.sh                   — install ~/.claude (creates symlinks)
 ├── setup-repos.sh             — per-repo onboarding (copies templates, installs CI)
 ├── verify-setup.sh            — verify installation
 └── restore.sh                 — undo installation, restore backups
 ```
+
+---
+
+## Documentation Layers
+
+This repo keeps its own design in `docs/L*` (checked by `bash bin/statutory-integrity.sh`): a requirement changes in
+L2-001 first, a boundary or decision in L3-001 (add an ADR), setup or release steps in L4. Register every new layer doc
+in its `-000-artifact-registry` in the same commit.
+
+**Remediation (L6 → L6.1 → L7)** is for security reports and review batches — several findings handled as one
+session: L6 audit + plan, L6.1 checklist + evidence, one row in `L7-001-master-registry`. An ordinary bug fix is an
+issue, a PR and a CHANGELOG line.
 
 ---
 
