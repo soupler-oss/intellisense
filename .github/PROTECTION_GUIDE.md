@@ -1,6 +1,8 @@
 # Branch Protection Guide
 
-Soupler uses **GitHub Flow with a promotion branch**: feature → `develop` → `main`. Protection is enforced by **repository rulesets**, not classic branch protection — `gh api repos/.../branches/<branch>/protection` returns 404 by design.
+Soupler uses **GitHub Flow with a promotion branch**: feature → `develop` → `main`. The default branch is `main`, so
+visitors see the released version; pull requests target `develop` (the `Branch Policy` check rejects anything else
+into `main`). Protection is enforced by **repository rulesets**, not classic branch protection — `gh api repos/.../branches/<branch>/protection` returns 404 by design.
 
 ## Rulesets (source of truth: `.github/governance/rulesets/*.json`)
 

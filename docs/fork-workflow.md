@@ -134,13 +134,13 @@ Before starting work, sync your fork with upstream:
 
 ```bash
 git fetch upstream
-git rebase upstream/main  # or upstream/master, depending on default branch
+git rebase upstream/develop   # work starts from develop; main holds only released versions
 ```
 
 ### Phase: Create Feature Branch
 
 ```bash
-git checkout -b <branch-name>
+git checkout -b <branch-name> upstream/develop
 # Work, commit, test...
 git push origin <branch-name>
 ```
@@ -150,10 +150,11 @@ git push origin <branch-name>
 On GitHub:
 
 ```
-PR: <branch-name> → soupler-oss/intellisense (upstream main/master)
+PR: <branch-name> → soupler-oss/intellisense, base: develop
 ```
 
-**Not** to your own fork. The PR flows from your branch directly to upstream's default branch.
+**Not** to your own fork. GitHub preselects the default branch (`main`) as the base; change it to `develop`. Only the
+maintainer's `release:` promotion targets `main`, and the `Branch Policy` check rejects anything else.
 
 ### Phase: Review & Iterate
 
@@ -301,7 +302,7 @@ Yes. Rebase freely:
 
 ```bash
 git fetch upstream
-git rebase upstream/main
+git rebase upstream/develop
 git push origin <branch-name> --force  # Force-push to your fork is OK
 ```
 

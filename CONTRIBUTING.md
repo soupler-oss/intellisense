@@ -11,7 +11,9 @@ your fork: feature branch  ->  PR into develop  ->  maintainer review  ->  devel
 ```
 
 - **Fork** the repository and branch from `develop`: `<type>/<short-slug>` where type is `feat fix docs chore tech infra`.
-- **Open your PR against `develop`.** PRs targeting `main` are rejected by the `Branch Policy` check; only the maintainer's `develop` → `main` promotion goes there.
+- **Open your PR against `develop`.** The repository's default branch is `main` (it holds the released version), so
+  GitHub preselects `main` as the base: change it to `develop`. PRs targeting `main` are rejected by the
+  `Branch Policy` check; only the maintainer's `develop` → `main` promotion goes there.
 - Branch protection applies to everyone: every change needs a pull request, the required checks (`Statutory Integrity`, `PR Metadata`, `Tests`, `Secret Scan`, `Intellisense Gate`, and `Branch Policy` for `main`) must pass, and the maintainer must approve. Release tags (`v*`) can only be created by the maintainer.
 - First-time contributors' workflow runs need the maintainer's approval before they start.
 

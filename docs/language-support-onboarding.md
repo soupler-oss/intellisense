@@ -69,7 +69,7 @@ Run on every stack-add PR. Checks 2–9 are merge-blocking; checks 1 and 11 are 
 | 9 | `setup.sh` ↔ `setup-repos.sh` parity | `bash tests/test_stack_detection.sh` (Check H) | Manual-fallback prompt in `setup.sh` lists the same stacks as `setup-repos.sh`'s validation arm, minus stacks classified `unsupported` | YES if a stack is added to `setup-repos.sh` but the `setup.sh` manual prompt is left stale | BLOCKING |
 | 10 | Existing content validation | `bash scripts/validate-intellisense-content.sh` | PASS (frontmatter, references, token budgets) | NO — does not check stack purity | BLOCKING |
 | 11 | AI-regression proof | `bash tests/scenario_<stack>_<pattern>/run.sh` (when applicable) | `before` test passes against the buggy code; `after` test fails | Phase-specific | BLOCKING when present |
-| 12 | Touched-file scope | `git diff --name-only origin/main..HEAD \| sort` | Only files in the inventory above | Reviewer comparison | Advisory |
+| 12 | Touched-file scope | `git diff --name-only origin/develop..HEAD \| sort` | Only files in the inventory above | Reviewer comparison | Advisory |
 
 ---
 
