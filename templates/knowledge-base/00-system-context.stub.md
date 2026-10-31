@@ -49,7 +49,7 @@ Example:
 - [Pattern]: [Why used]
 
 Example:
-- Event-driven payout: async jobs decouple payment processing from account updates
+- Event-driven invoice: async jobs decouple payment processing from account updates
 - Soft-delete only: maintains audit trail for regulatory compliance
 - Redis cache for read-heavy lookups: with 5-minute TTL, fallback to DB on miss
 

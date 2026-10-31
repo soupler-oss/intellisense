@@ -242,6 +242,21 @@ echo "echo degraded-install probe" >> "$T_F/setup.sh"
 git -C "$T_F" add setup.sh
 git -C "$T_F" commit -m "chore: tweak setup (no task trailer — degraded-install probe)" >/dev/null 2>&1
 
+# The hook also looks for the engine in the standard install folders (Homebrew, /usr/local/bin). On a machine with
+# intellisense installed there, a missing engine cannot be simulated, so the "engine is missing" message checks are
+# skipped; CI, which has no installed engine, runs them. The BLOCK itself is asserted either way.
+ENGINE_INSTALLED=""
+for _d in /opt/homebrew/bin /usr/local/bin /home/linuxbrew/.linuxbrew/bin; do
+  [ -x "$_d/intellisense" ] && ENGINE_INSTALLED="$_d/intellisense"
+done
+assert_engine_missing_message() {
+  if [ -n "$ENGINE_INSTALLED" ]; then
+    echo "  SKIP: $2 — intellisense is installed at $ENGINE_INSTALLED, so a missing engine cannot be simulated here"
+    return
+  fi
+  assert_grep_match "engine is not installed" "$1" "$2"
+}
+
 # Run the hook with the library deliberately unreachable:
 # - INTELLISENSE_SETUP_PATH points to nowhere
 # - HOME points to an empty dir (no ~/.claude/config.json to fall back to)
@@ -261,8 +276,10 @@ HOOK_EXIT=${HOOK_EXIT:-0}
 
 assert_exit_code "1" "$HOOK_EXIT" "degraded install: setup.sh without task trailer still BLOCKED (no fail-open)"
 # Degraded now means "the engine cannot be found": the hook fails closed and names the fix.
-assert_grep_match "engine is not installed" "$OUT" "error says the engine is missing (fail-closed)"
-assert_grep_match "intellisense live install" "$OUT" "error names the install command"
+assert_engine_missing_message "$OUT" "error says the engine is missing (fail-closed)"
+if [ -z "$ENGINE_INSTALLED" ]; then
+  assert_grep_match "intellisense live install" "$OUT" "error names the install command"
+fi
 # Sanity: confirm we actually degraded the env (library would have logged otherwise).
 # This assertion guards against the test silently re-resolving via $HOME — if it
 # stops being a meaningful degradation, the test is no longer probing what it claims.
@@ -325,7 +342,7 @@ OUT=$(
 HOOK_EXIT=${HOOK_EXIT:-0}
 
 assert_exit_code "1" "$HOOK_EXIT" "degraded install: hooks/pre-push without task trailer still BLOCKED"
-assert_grep_match "engine is not installed" "$OUT" "degraded install: error says the engine is missing (fail-closed)"
+assert_engine_missing_message "$OUT" "degraded install: error says the engine is missing (fail-closed)"
 
 rm -rf "$T_H" "$FAKE_HOME"
 echo ""

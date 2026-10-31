@@ -93,8 +93,8 @@ After completion, 4 documents exist in `knowledge-base/`:
 
 5. **claude-md-drift-report.md** (on-demand)
    - Compares scan output against CLAUDE.md sections
-   - Example: "Expected file `models/payout.go` not found — check Stack field in CLAUDE.md"
-   - Flags schema drift (expected table `payouts` in code, not found in database schema analysis)
+   - Example: "Expected file `models/invoice.go` not found — check Stack field in CLAUDE.md"
+   - Flags schema drift (expected table `invoices` in code, not found in database schema analysis)
 
 ---
 
@@ -118,7 +118,7 @@ File: `.intellisense-docservice-state.json`
     "services": 4
   },
   "scan_results": {
-    "tables_detected": ["payouts", "payout_items", "journal_entries"],
+    "tables_detected": ["invoices", "invoice_items", "journal_entries"],
     "endpoints_detected": 8,
     "imports_shared_lib": true
   },

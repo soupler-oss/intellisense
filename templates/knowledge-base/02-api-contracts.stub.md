@@ -8,12 +8,12 @@ Endpoints consumed by OTHER services. Only include external APIs (APIs called by
 <!-- TODO: Add each external-facing endpoint consumed by other services -->
 
 ```
-GET /api/v1/payouts/:cycle_id
+GET /api/v1/invoices/:cycle_id
 ```
 
 **Consumed by**: reporting-service, web-app
 
-**Purpose**: Fetch payout details for audit trail and user dashboard
+**Purpose**: Fetch invoice details for audit trail and user dashboard
 
 **Auth**: Bearer token (OAuth2) — service-to-service
 
@@ -39,8 +39,8 @@ GET /api/v1/payouts/:cycle_id
 ```
 
 **Errors**:
-- `404 Not Found` — payout doesn't exist
-- `403 Forbidden` — caller not authorized to view this payout
+- `404 Not Found` — invoice doesn't exist
+- `403 Forbidden` — caller not authorized to view this invoice
 - `500 Internal Server Error` — [indicate rare case]
 
 **Rate Limit**: 1000 req/min per service; 429 if exceeded
@@ -102,7 +102,7 @@ POST /api/v1/reconcile
 
 | Endpoint | Deprecated | Sunset |
 |----------|-----------|--------|
-| GET /api/v0/payouts | 2026-03-01 | 2026-06-30 |
+| GET /api/v0/invoices | 2026-03-01 | 2026-06-30 |
 
 All consumers must migrate to v1 before sunset date.
 
@@ -110,14 +110,14 @@ All consumers must migrate to v1 before sunset date.
 
 <!-- TODO: If you provide an SDK -->
 
-Available at: [github.com/your-org/payout-sdk-go]
+Available at: [github.com/your-org/invoice-sdk-go]
 
 Version: 1.2.0
 
 Usage:
 ```go
-import "github.com/your-org/payout-sdk-go"
+import "github.com/your-org/invoice-sdk-go"
 
-client := payout.NewClient(apiKey)
-payout, err := client.GetPayout(ctx, cycleID)
+client := invoice.NewClient(apiKey)
+invoice, err := client.GetInvoice(ctx, cycleID)
 ```

@@ -394,7 +394,7 @@ cat CLAUDE.md
 - Downstream Consumers (should list reporting-service, api-gateway)
 - Shared Database Tables (should list transactions, invoices)
 - API Contracts
-- Library Consumers (shared-go-lib)
+- Library Consumers (shared-lib)
 - Deployment Order
 - Domain Terms
 - Financial Rules (if applicable)

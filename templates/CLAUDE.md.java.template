@@ -163,7 +163,7 @@ Change Contract `risk_level` by one tier and requires explicit user confirmation
 - **Actuator endpoint exposure**: `/actuator/env`, `/actuator/configprops`, `/actuator/heapdump` leak secrets if exposed without auth — confirm `management.endpoints.web.exposure.include` is an explicit allowlist (never `*`)
 - **Spring placeholder `${VAR:?message}`**: Bash syntax, NOT Spring — Spring parses as `default="?message"` and silently boots. Use `${VAR}` (no default → fail-fast) or `${VAR:}` + `@PostConstruct` validator
 - **`double` / `float` for money**: BigDecimal is mandatory for any monetary calculation in this repo
-- **Shared library modification**: Changes affect ALL downstream consumers; run `/discover-impact` before modifying any shared package
+- **Shared library modification**: Changes affect ALL downstream consumers; list every consumer from service-map.md and build each one before modifying any shared package
 - [TODO: add repo-specific escalation triggers here]
 
 ## Run / Test / Build

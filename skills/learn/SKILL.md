@@ -27,26 +27,26 @@ Shared knowledge goes where every session and agent sees it: a rule (the repo's 
 
 ```
 ## Session Learning Capture
-Task: Add account reconciliation to payout cycle
+Task: Add account reconciliation to invoice cycle
 Repo: orders-service
 Time: 2 hours
 
 ### Patterns Discovered
 
-#### Pattern 1: Payout Validation Framework
-**What**: Payouts require 3-layer validation (account → payout → audit)
-**Where used**: `services/payout_service.go`, `services/reconciliation_service.go`
-**Why**: Prevents balance drift, ensures account state matches payout state
+#### Pattern 1: Invoice Validation Framework
+**What**: Invoices require 3-layer validation (account → invoice → audit)
+**Where used**: `services/invoice_service.go`, `services/reconciliation_service.go`
+**Why**: Prevents balance drift, ensures account state matches invoice state
 **Reusable?**: YES — Any financial operation involving balance mutations should follow this
 **Code skeleton**:
 ```go
-type PayoutValidator interface {
+type InvoiceValidator interface {
     ValidateAccount(ctx context.Context, accountID int64) error
-    ValidatePayout(ctx context.Context, payoutID int64) error
-    ValidateAuditTrail(ctx context.Context, payoutID int64) error
+    ValidateInvoice(ctx context.Context, invoiceID int64) error
+    ValidateAuditTrail(ctx context.Context, invoiceID int64) error
 }
 ```
-**For shared-go-lib?**: Consider extracting to shared-go-lib if billing or passbook need it
+**For shared-lib?**: Consider extracting to shared-lib if billing or ledger need it
 
 #### Pattern 2: Concurrent Access via SELECT FOR UPDATE
 **What**: Account balance mutations MUST use SELECT FOR UPDATE lock
@@ -57,8 +57,8 @@ type PayoutValidator interface {
 
 #### Pattern 3: Idempotency via transaction_reference
 **What**: Every financial operation needs idempotency via transaction_reference check
-**Where**: `handlers/payout_handlers.go`, payout acceptance endpoint
-**Why**: Retries on timeout must not double-deduct, double-credit, or duplicate payouts
+**Where**: `handlers/invoice_handlers.go`, invoice acceptance endpoint
+**Why**: Retries on timeout must not double-deduct, double-credit, or duplicate invoices
 **Pattern**:
 ```go
 if exists(txRef) {
@@ -75,11 +75,11 @@ return result
 
 | Term | Definition | Used in | Related Terms |
 |------|-----------|---------|---------------|
-| Reconciliation | Process of matching account balance against payout cycle total | orders-service payout flow | Payout cycle, account balance, payout mutation |
-| Payout cycle | Time-based grouping of transactions for payout | orders-service, reporting-service audit trail | Payout, reconciliation, payout cycle |
+| Reconciliation | Process of matching account balance against invoice cycle total | orders-service invoice flow | Invoice cycle, account balance, invoice mutation |
+| Invoice cycle | Time-based grouping of transactions for invoice | orders-service, reporting-service audit trail | Invoice, reconciliation, invoice cycle |
 | Parity check | 7-day verification that old balance column = new balance column after migration | Database migration safety protocol | Dual-write, cutover |
 
-**For CLAUDE.md update**: Add "Reconciliation" and "Payout cycle" to orders-service's Domain Terms section
+**For CLAUDE.md update**: Add "Reconciliation" and "Invoice cycle" to orders-service's Domain Terms section
 
 ---
 
@@ -104,7 +104,7 @@ Never to MEMORY.md.
 3. **Project — financial validation pattern**
    ```bash
    bd remember --key project-financial-validation-pattern \
-     "Payout validation framework (account → payout → audit) is the established 3-layer pattern. Use for any new financial operation. Why: prevents reimplementing validation logic per feature. How to apply: invoke whenever a new financial mutation endpoint is added."
+     "Invoice validation framework (account → invoice → audit) is the established 3-layer pattern. Use for any new financial operation. Why: prevents reimplementing validation logic per feature. How to apply: invoke whenever a new financial mutation endpoint is added."
    ```
 
 ---
@@ -128,10 +128,10 @@ Never to MEMORY.md.
 **Discovered**: orders-service and reporting-service coordination is fragile
 - reporting-service consumes orders-service reconciliation API
 - If API contract changes, reporting-service breaks silently
-- Recommendation: Add `/validate-api-contract` (planned — not yet built) to required skills for orders-service changes
+- Recommendation: check every consumer of the orders-service API (from service-map.md) before changing it
 
 **Discovered**: accounts-service and orders-service have complex dance around balance mutations
-- Both read account_balances; orders-service updates during payout
+- Both read account_balances; orders-service updates during invoice
 - Risk: Locking strategy unclear; could cause deadlocks if accounts-service and orders-service both lock same account
 - Recommendation: Add to accounts-service CLAUDE.md "Known Gotchas" section
 
@@ -146,7 +146,7 @@ Never to MEMORY.md.
 - [x] Add these patterns to orders-service CLAUDE.md (Architecture section)
 - [x] Apply the suggested memory entries above to persist user/feedback/project insights
 - [ ] Review cross-repo insights with reporting-service team
-- [ ] Consider extracting 3-layer validation to shared-go-lib (low priority for now)
+- [ ] Consider extracting 3-layer validation to shared-lib (low priority for now)
 
 ---
 
@@ -154,7 +154,7 @@ Never to MEMORY.md.
 
 ```
 ## Session Learning Capture
-Task: Fix typo in payout email template
+Task: Fix typo in invoice email template
 Repo: orders-service
 Time: 5 minutes
 

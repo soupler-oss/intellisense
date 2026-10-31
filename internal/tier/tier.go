@@ -103,12 +103,22 @@ func Classify(p *policy.Policy, paths []string, diff DiffFunc) Result {
 	return res
 }
 
-// DangerousPhrases keep a comment-only diff out of the fast lane: commenting code out, or a comment that
-// says a check is being switched off, is a behaviour change dressed as a comment.
+// DangerousPhrases keep a comment-only diff out of the fast lane: commenting code out, a comment that says a
+// check is being switched off, or a directive that silences a linter, type checker, scanner or coverage tool is a
+// behaviour change dressed as a comment. Matching is case-insensitive and on substrings, so "disable" also covers
+// eslint-disable, pylint: disable, rubocop:disable, swiftlint:disable and #pragma warning disable.
 var DangerousPhrases = []string{
 	"comment out", "commented out", "comment-out", "disable", "disabled", "remove validation",
 	"remove the validation", "skip validation", "skip the check", "skip check", "bypass", "turn off",
 	"no-op", "noop", "stub out", "stubbed out",
+	// Linters: golangci-lint and clang-tidy, flake8, Sonar, JetBrains, PHP_CodeSniffer, staticcheck, Deno, Biome.
+	"nolint", "noqa", "nosonar", "noinspection", "phpcs:ignore", "lint:ignore", "lint-ignore", "biome-ignore",
+	// Type checkers: TypeScript, mypy, PHPStan, Psalm.
+	"ts-ignore", "ts-nocheck", "ts-expect-error", "type: ignore", "phpstan-ignore", "psalm-suppress",
+	// Security scanners: gosec and bandit, Semgrep, gitleaks, intellisense's own secret check.
+	"nosec", "nosemgrep", "gitleaks:allow", "allow-secret",
+	// Coverage: Istanbul, c8, coverage.py.
+	"istanbul ignore", "c8 ignore", "pragma: no cover",
 }
 
 var dangerous = regexp.MustCompile(`(?i)` + strings.Join(quoteAll(DangerousPhrases), "|"))

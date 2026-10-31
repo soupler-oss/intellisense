@@ -128,7 +128,7 @@ Total requests: 500
 Successful: 500
 Lock contention: 12 instances (2.4%)
 
-Query: SELECT balance FROM payouts WHERE payout_id = ? FOR UPDATE
+Query: SELECT balance FROM invoices WHERE invoice_id = ? FOR UPDATE
 
 Latency Distribution:
   p50:  8ms
@@ -155,7 +155,7 @@ Breakdown (when contention - 12 instances):
 **Lock contention analysis:**
 - 12 of 500 requests experienced lock wait >30ms
 - Worst case: 156ms (request had to wait for another transaction)
-- Root cause: 2 concurrent requests to same payout_id
+- Root cause: 2 concurrent requests to same invoice_id
 - This is expected under load; idempotency prevents duplicate effects
 - SLA still met (p99 = 42ms < 50ms)
 
@@ -183,7 +183,7 @@ SLA target (p99): 80ms
 Breakdown:
   Connection pool get: 1ms
   INSERT execution: 3ms
-  Index update (audit_logs_payout_id): 1ms
+  Index update (audit_logs_invoice_id): 1ms
   Commit: 1ms
 ```
 
@@ -302,17 +302,17 @@ Actual (p99, truly async): 195ms + 385ms = 580ms
 
 ### Load Testing Results
 
-**Concurrency test (10 concurrent refunds to same payout):**
+**Concurrency test (10 concurrent refunds to same invoice):**
 
 ```
 Concurrent requests: 10
-Each request: Execute refund for same payout_id
+Each request: Execute refund for same invoice_id
 Duration: 30 seconds
 
 Results:
   Successful refunds: 10 (all succeeded, no duplicates due to idempotency)
   Lock wait time: 85-156ms per request (expected under contention)
-  Total payout balance mutation: Exactly 1x (correct)
+  Total invoice balance mutation: Exactly 1x (correct)
   Audit trail: All 10 operations logged (correct)
 
 Conclusion: ✓ PASS — Concurrent access handled correctly with locks
@@ -375,7 +375,7 @@ Environment: staging
 
 ### Investigation: orders-service DB Query Bottleneck
 
-**Query: SELECT balance FROM payouts WHERE payout_id = ? FOR UPDATE**
+**Query: SELECT balance FROM invoices WHERE invoice_id = ? FOR UPDATE**
 
 ```
 Latency Distribution:
@@ -387,14 +387,14 @@ Root cause: N+1 query problem detected
 
 Code (WRONG):
 for each refund in refunds {
-    balance = db.query("SELECT balance FROM payouts WHERE payout_id = ?", id)  // ← INSIDE LOOP
+    balance = db.query("SELECT balance FROM invoices WHERE invoice_id = ?", id)  // ← INSIDE LOOP
     update balance
 }
 
 Fixed code:
-balances = db.query("SELECT balance FROM payouts WHERE payout_id IN (?)", ids)  // ← BATCHED
+balances = db.query("SELECT balance FROM invoices WHERE invoice_id IN (?)", ids)  // ← BATCHED
 for each refund in refunds {
-    balance = balances[refund.payout_id]
+    balance = balances[refund.invoice_id]
     update balance
 }
 ```

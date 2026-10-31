@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: soupler-oss/intellisense@v1.0.0
+      - uses: soupler-oss/intellisense@v1.0.1
 ```
 
 Then make **Intellisense Gate** a required status check in your branch ruleset.
@@ -38,7 +38,7 @@ The action builds the CLI from its own source at the ref you pin, and runs `inte
 Use them to ask for more on high-risk changes, for example a second reviewer:
 
 ```yaml
-      - uses: soupler-oss/intellisense@v1.0.0
+      - uses: soupler-oss/intellisense@v1.0.1
         id: gate
       - if: steps.gate.outputs.tier == '2'
         run: gh pr edit "$PR" --add-label tier-2

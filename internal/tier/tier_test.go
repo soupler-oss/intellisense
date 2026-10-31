@@ -1,6 +1,7 @@
 package tier
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/soupler-oss/intellisense/internal/policy"
@@ -92,6 +93,40 @@ func TestFastLane(t *testing.T) {
 	r = Classify(p, []string{"a.go"}, func(string) (string, bool) { return comment, true })
 	if r.Tier != 1 {
 		t.Errorf("fast_lane: false must keep the default tier, got %d", r.Tier)
+	}
+}
+
+// A comment that silences a linter, type checker, scanner or coverage tool is not a harmless comment edit.
+func TestFastLaneSilencingDirectives(t *testing.T) {
+	p := policy.Default()
+	for _, line := range []string{
+		"// nolint:gosec", "// NOLINT", "# noqa: E501", "# nosec B105", "// #nosec G101", "// @ts-ignore",
+		"// @ts-expect-error", "// @ts-nocheck", "# type: ignore", "/* istanbul ignore next */", "/* c8 ignore next */",
+		"# pragma: no cover", "// eslint-disable-next-line no-eval", "# pylint: disable=broad-except",
+		"# rubocop:disable Security/Eval", "// swiftlint:disable force_cast", "// NOSONAR", "// noinspection SqlInjection",
+		"// phpcs:ignore", "// @phpstan-ignore-next-line", "// @psalm-suppress TaintedSql", "// nosemgrep",
+		"// gitleaks:allow", "// intellisense:allow-secret", "// deno-lint-ignore no-explicit-any",
+		"// biome-ignore lint/security", "//lint:ignore SA1019 reason",
+	} {
+		path := "x.go"
+		if strings.HasPrefix(line, "#") {
+			path = "x.py"
+		}
+		diff := "--- a/" + path + "\n+++ b/" + path + "\n@@ -1 +1 @@\n+" + line + "\n"
+		if !CommentOnly(path, diff) {
+			t.Fatalf("%q should be a comment-only diff in %s", line, path)
+		}
+		r := Classify(p, []string{path}, func(string) (string, bool) { return diff, true })
+		if r.Tier != 1 || r.Files[0].By != ByDefault {
+			t.Errorf("%q: got tier %d by %s, want 1 by %s", line, r.Tier, r.Files[0].By, ByDefault)
+		}
+	}
+	// An ordinary comment still takes the fast lane.
+	r := Classify(p, []string{"x.go"}, func(string) (string, bool) {
+		return "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n+// Greet returns a friendly greeting.\n", true
+	})
+	if r.Tier != 0 {
+		t.Errorf("an ordinary comment should be Tier 0, got %d", r.Tier)
 	}
 }
 

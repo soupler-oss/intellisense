@@ -77,7 +77,7 @@ the full agent pipeline, regardless of estimated scope.
 
 | File | Size | Why High Risk |
 |---|---|---|
-| [TODO: src/payments/ledger.cc] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/payments/ledger.cc] | [XX KB] | [Reason: e.g., core invoice logic, shared by all callers] |
 | [TODO: src/auth/token_verifier.cc] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
 
 ## Structural Map
@@ -112,7 +112,7 @@ Layers and their purpose:
 
 [Service-specific glossary. Example:]
 - **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
-- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+- **Order Cycle** — invoice window (24h); orders bucketed by `created_at` UTC date
 
 ## Run / Test / Build
 

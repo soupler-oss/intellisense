@@ -64,7 +64,7 @@ discussion unless asked. Expand only on follow-up."]
 
 ```
 Handles transaction processing and order fulfillment for the billing domain.
-Reads user profiles from auth-service; emits payout events to reporting-service.
+Reads user profiles from auth-service; emits invoice events to reporting-service.
 All database access via GORM with explicit transaction support.
 Financial operations require SELECT FOR UPDATE on balance mutations.
 ```
@@ -143,7 +143,7 @@ Change Contract `risk_level` by one tier and requires explicit user confirmation
 
 - **Goroutine leak risk**: Do not block on unbuffered channels inside shared service methods —
   use `context.WithTimeout` and check `ctx.Done()`
-- **Shared library modification**: Changes affect ALL downstream consumers; run `/discover-impact`
+- **Shared library modification**: Changes affect ALL downstream consumers; list every consumer from service-map.md and build each one against the change
   before modifying any shared package
 - **SELECT FOR UPDATE missing**: Any mutation to a balance or financial aggregate without
   `SELECT FOR UPDATE` is a race condition — escalate automatically

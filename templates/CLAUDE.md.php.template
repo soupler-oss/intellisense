@@ -64,7 +64,7 @@ code-level analysis. Routing to empty stubs adds noise, not context.
 [3–5 sentences describing the service design. Example:]
 
 ```
-Core API service handling driver allocation, mission management, and account/payout processing.
+Core API service handling driver allocation, mission management, and account/invoice processing.
 Requests are parsed and validated via Form Requests, then routed to the Service layer.
 Services orchestrate business logic; all database access is via Eloquent through Repositories.
 Real-time location updates flow through Socket.IO (Node.js) and are batched into MySQL via Redis.

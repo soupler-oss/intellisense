@@ -41,24 +41,24 @@ Generate simplified layered diagram (5-8 lines):
                      │
 ┌────────────────────▼────────────────────────────┐
 │  API Layer (Handlers / Controllers)              │
-│  - GET /payouts, POST /payouts, etc.     │
+│  - GET /invoices, POST /invoices, etc.     │
 └────────────────────┬────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────┐
 │  Service Layer (Business Logic)                  │
-│  - PayoutService                             │
+│  - InvoiceService                             │
 │  - JournalService                                 │
 └────────────────────┬────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────┐
 │  Repository Layer (Data Access)                  │
-│  - PayoutRepository                          │
+│  - InvoiceRepository                          │
 │  - JournalRepository                              │
 └────────────────────┬────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────┐
 │  Database (PostgreSQL)                           │
-│  - payouts, journal_entries, payout_items│
+│  - invoices, journal_entries, invoice_items│
 └─────────────────────────────────────────────────┘
 ```
 
@@ -70,13 +70,13 @@ Generate simplified layered diagram (5-8 lines):
                      │
 ┌────────────────────▼────────────────────────────┐
 │  Components (UI)                                 │
-│  - PayoutListComponent                       │
-│  - PayoutDetailComponent                     │
+│  - InvoiceListComponent                       │
+│  - InvoiceDetailComponent                     │
 └────────────────────┬────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────┐
 │  Services (HTTP Client)                          │
-│  - PayoutService                             │
+│  - InvoiceService                             │
 └────────────────────┬────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────┐
@@ -96,15 +96,15 @@ Describe typical request-response flow (1-2 paragraphs):
 ```
 ## Data Flow
 
-### Request: POST /api/payouts
-1. HTTP Client sends request with payout data (JSON body)
+### Request: POST /api/invoices
+1. HTTP Client sends request with invoice data (JSON body)
 2. Handler receives request, validates input (Form Request validation in Laravel, struct tags in Go)
 3. Service processes business logic:
    - Checks idempotency (transaction_reference)
    - Calculates amount_minor_units correctly (no float64)
    - Acquires database lock (SELECT FOR UPDATE)
 4. Repository executes database transaction:
-   - Inserts payout record
+   - Inserts invoice record
    - Inserts journal entries atomically
    - Releases lock
 5. Service returns success response
@@ -144,18 +144,18 @@ List where tests exist and what they cover:
 ## Test Structure
 
 ### Unit Tests (tests/unit/ or tests/Unit/)
-- **PayoutService_test.go**: Business logic isolation (mocked repositories)
+- **InvoiceService_test.go**: Business logic isolation (mocked repositories)
 - **JournalCalculator_test.go**: Math functions (amount calculations with int64 minor-currency-units)
 - Coverage: 85% of business logic
 
 ### Integration Tests (tests/integration/ or tests/Integration/)
-- **PayoutCreateTest_test.go**: Full flow from handler to database
+- **InvoiceCreateTest_test.go**: Full flow from handler to database
 - Uses real PostgreSQL test database
-- Coverage: Payout creation, concurrent requests, idempotency
+- Coverage: Invoice creation, concurrent requests, idempotency
 
 ### Regression Tests
 - **IDempotencyTest_test.go**: Same request run twice → no duplicate journal entries
-- **ConcurrencyTest_test.go**: 100 concurrent payout requests → no race conditions
+- **ConcurrencyTest_test.go**: 100 concurrent invoice requests → no race conditions
 - **BalanceVerificationTest_test.go**: After N operations, account balance = sum of debits/credits
 ```
 
@@ -168,13 +168,13 @@ List migration, feature flag, and rollback concerns:
 
 ### Migrations
 - Schema changes run via migrations/ directory
-- Example: `2026-04-21_add_idempotency_to_payouts.sql`
+- Example: `2026-04-21_add_idempotency_to_invoices.sql`
 - Dual-write strategy for column changes (shadow → backfill → parity check → remove)
 - Never run migrations during peak hours (9 AM–9 PM UTC)
 
 ### Feature Flags
 - Soft-delete feature: Environment variable `ENABLE_SOFT_DELETE=true`
-- Payout calculation v2: Feature flag `PAYOUT_V2_ENABLED=false` (gradual rollout)
+- Invoice calculation v2: Feature flag `INVOICE_V2_ENABLED=false` (gradual rollout)
 - Toggled at runtime, no code redeploy required
 
 ### Rollback Procedure

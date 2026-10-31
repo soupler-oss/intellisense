@@ -65,7 +65,7 @@ discussion unless asked. Expand only on follow-up."]
 
 ```
 Express HTTP service handling order processing for the billing domain.
-Reads user profiles from auth-service; writes payout events via Kafka producer.
+Reads user profiles from auth-service; writes invoice events via Kafka producer.
 All database access via Prisma with explicit $transaction blocks for multi-row writes.
 Financial endpoints require idempotency-key header; idempotency rows enforce uniqueness at DB level.
 ```
@@ -73,7 +73,7 @@ Financial endpoints require idempotency-key header; idempotency rows enforce uni
 [Or for NestJS:]
 
 ```
-NestJS service organized by feature module (orders, payments, payouts).
+NestJS service organized by feature module (orders, payments, invoices).
 Each module: controller (HTTP) + service (business logic) + repository (DB) + DTO (validation).
 Global ValidationPipe + class-validator on all DTOs. Global ExceptionFilter normalizes errors.
 TypeORM with explicit transaction managers for financial mutations.
@@ -86,7 +86,7 @@ the full agent pipeline, regardless of estimated scope.
 
 | File | Size | Why High Risk |
 |---|---|---|
-| [TODO: src/services/payment.service.ts] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: src/services/payment.service.ts] | [XX KB] | [Reason: e.g., core invoice logic, shared by all callers] |
 | [TODO: src/middleware/auth.middleware.ts] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
 
 ## Structural Map
@@ -126,7 +126,7 @@ Layers and their purpose:
 
 [Service-specific glossary. Example:]
 - **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
-- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+- **Order Cycle** — invoice window (24h); orders bucketed by `created_at` UTC date
 
 ## Run / Test / Build
 
