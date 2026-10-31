@@ -8,7 +8,7 @@
 | Status | Final |
 | Version | v1 |
 | Created | 2026-10-30 |
-| Last Updated | 2026-10-30 |
+| Last Updated | 2026-10-31 |
 | Owner | Soupler |
 | Reviewers | Soupler |
 | Copyright | © 2026 Soupler. All rights reserved. |
@@ -17,11 +17,22 @@
 
 ## Purpose
 
-How Soupler writes — in product copy, docs, commit messages and PRs.
+How intellisense is written — in docs, CLI output, commit messages and PRs.
 
 ## 1 · Voice
 
-⚠️ GAP: set the brand voice in 3–5 adjectives and one "we say / we don't say" pair for each. Until then default to: plain, specific, direct, no hype.
+intellisense is an open-source tool, not a brand product, so it has no brand voice: it is written for the developer
+reading it, in four qualities.
+
+| Quality | We say | We don't say |
+|---|---|---|
+| **Plain** | "The push stops and says what's missing." | "Leverage seamless governance enforcement." |
+| **Specific** | "A change to `payments/` needs a ticket and a change note." | "Risky changes need extra evidence." |
+| **Direct** | "Run `intellisense sync`." | "You may want to consider running sync." |
+| **Honest** | "Scoop is untested on Windows so far." | "Works everywhere." |
+
+No marketing words (*seamless*, *powerful*, *revolutionary*), no exclamation marks, and no claims the code doesn't
+back.
 
 ## 2 · Rules that apply to documentation regardless of brand voice
 
@@ -36,3 +47,4 @@ How Soupler writes — in product copy, docs, commit messages and PRs.
 | Version | Date | Author | Summary of changes |
 |---|---|---|---|
 | v1 | 2026-10-30 | Soupler | Initial release from repo-governance v1.3.0 |
+| v1 | 2026-10-31 | Soupler | Voice set for an open-source project (no brand voice); the gap is closed |
