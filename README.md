@@ -300,6 +300,10 @@ Run `intellisense check --base <ref> --head <ref>` in a job: it exits `1` when t
 - **[Live mode](docs/live-mode.md)** — live checks inside Claude Code
 - **[Changelog](CHANGELOG.md)**
 
+How intellisense itself is built and run — product requirements, architecture decisions, the release runbook — is in
+the documentation layers under [`docs/`](docs/): [L2 product](docs/L2-product/), [L3 architecture](docs/L3-architecture/),
+[L4 release and setup](docs/L4-infrastructure/), and [L6/L7 remediation](docs/L6-remediation/).
+
 ## Contributing
 
 Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and [CLAUDE.md](CLAUDE.md) before
