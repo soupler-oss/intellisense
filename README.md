@@ -8,11 +8,11 @@
 before they can be pushed. It works the same for Claude Code, Codex, GitHub Copilot and Cursor.**
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2C4BFF)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-2C4BFF)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.1-2C4BFF)](CHANGELOG.md)
 [![Go](https://img.shields.io/badge/go-%E2%89%A5%201.22-00ADD8)](go.mod)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555)](#install)
 
-[What it does](#what-it-does) · [Examples](#examples) · [Get started](#get-started-in-5-minutes) · [Words we use](#words-we-use) · [Two ways to use it](#two-ways-to-use-it) · [Reference](#reference) · [FAQ](#faq)
+[What it does](#what-it-does) · [Examples](#examples) · [Get started](#get-started-in-5-minutes) · [Words we use](#words-we-use) · [Two ways to use it](#two-ways-to-use-it) · [Features](#features-and-customization) · [Reference](#reference) · [FAQ](#faq)
 
 </div>
 
@@ -185,7 +185,8 @@ Tier 0 — routine
 Two exceptions keep this safe:
 - **Files in risky folders never get this shortcut.** A comment edit in `payments/charge.go` is still high risk.
 - **Comments that switch something off don't count as harmless.** A comment containing words like "disable",
-  "bypass", "skip validation" or "comment out" is treated as a real change:
+  "bypass", "skip validation" or "comment out", or a directive that silences a tool — `// nolint:gosec`, `# noqa`,
+  `# nosec`, `// @ts-ignore`, `/* istanbul ignore */` — is treated as a real change:
 
 ```console
 $ intellisense classify          # the comment now says "TODO: disable the rate limit check for now"
@@ -322,7 +323,7 @@ The rest of this page is for setting it up in detail.
 | **Risk tiers from paths** | `.intellisense.yml` maps file paths to tiers with patterns. Defaults cover auth, money, migrations, secrets, CI, infrastructure, dependencies and agent instructions. Tiers are a list: add a Tier 3, rename one, or change what each needs. |
 | **Evidence you choose** | Per tier: a task reference on each commit, a change contract, a changed test. Task references can be checked against GitHub, Jira, Linear or Beads. |
 | **Contracts with a schema** | A contract is a commit line or a Markdown file (`intellisense contract new`), checked against the fields your policy defines. |
-| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.0`) runs it on every pull request, with annotations and a job summary. |
+| **The same gate in CI** | A GitHub Action (`uses: soupler-oss/intellisense@v1.0.1`) runs it on every pull request, with annotations and a job summary. |
 | **One rule set, four agents** | `intellisense sync` writes `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md` plus scoped `.github/instructions/`, and `.cursor/rules/`, all from `.intellisense/rules/`. CI fails when they drift. |
 | **Rules worth following** | Security and reasoning baselines, coding style, testing, and rules for Go, PHP/Laravel, Angular, React, Node, Python, Java, Flutter, Rust, C#, Ruby, Swift and C/C++. Add your own language with `custom_stacks`. |
 | **Your own rules** | Files in `.intellisense/rules/organization/` reach every agent, optionally only for some paths. Edit a built-in rule and updates keep your version; switch one off with `rules.disable`. |
@@ -426,14 +427,26 @@ Run `intellisense check --base <ref> --head <ref>` in a job: it exits `1` when t
 [docs/ci.md](docs/ci.md).
 </details>
 
-## Documentation
+## Features and customization
 
-- **[Quick start](QUICK_START.md)** and **[Installation](INSTALLATION.md)** — step by step
-- **[Policy reference](docs/policy.md)** — every setting in `.intellisense.yml`
-- **[Agents](docs/agents.md)** — what each AI assistant's file contains
-- **[CI](docs/ci.md)** — the GitHub Action and other CI systems
-- **[Live mode](docs/live-mode.md)** — live checks inside Claude Code
-- **[Changelog](CHANGELOG.md)**
+| Feature | What it does | Learn more |
+|---|---|---|
+| Risk tiers | Sorts every change by the paths it touches; add folders, tiers and requirements | [customization](docs/customization.md#mark-a-folder-as-risky) · [policy](docs/policy.md#how-a-tier-is-decided) |
+| Evidence | Ticket references, change contracts, changed tests — per tier | [customization](docs/customization.md#require-a-changed-test) · [policy](docs/policy.md#evidence) |
+| Change contracts | One line or a Markdown file; you choose the required fields | [customization](docs/customization.md#change-what-a-change-contract-must-say) · [policy](docs/policy.md#contract) |
+| Push check | A git hook that blocks a push missing evidence, and says how to fix it | [example 2](#2-the-assistant-changes-the-payment-code) |
+| Pull-request check | The same check as a GitHub Action, judged by the base branch's rules | [CI](docs/ci.md) · [example 5](#5-a-pull-request-tries-to-loosen-the-rules) |
+| Shared rules | One rule set written into Claude Code, Codex, Copilot and Cursor files | [agents](docs/agents.md) · [example 3](#3-one-rule-for-every-ai-assistant) |
+| Your own rules | Organization rules, scoped to paths; change or switch off built-in ones | [customization](docs/customization.md#add-your-own-rules-for-the-ai-assistants) |
+| Languages | Rules for 13 languages, plus your own | [customization](docs/customization.md#add-a-language) |
+| Slash commands | `/plan`, `/tdd`, `/verify` and more for Claude Code | [customization](docs/customization.md#add-slash-commands-for-claude-code) · [workflow](docs/WORKFLOW.md) |
+| Ticket systems | GitHub Issues, Jira, Linear or Beads; optionally check tickets exist | [integrations](docs/integrations.md#task-trackers) |
+| Code map | code-review-graph for "who calls this?" during review (Live mode) | [integrations](docs/integrations.md#code-review-graph) |
+| Usage telemetry | Per-commit metadata and a daily summary to your own collector (Live mode) | [integrations](docs/integrations.md#usage-telemetry) |
+| Live mode | Checks inside Claude Code while it works | [Live mode](docs/live-mode.md) |
+| Secrets and remotes | Flags likely secrets; refuses pushes to chosen remotes | [customization](docs/customization.md#secrets-in-commits) |
+
+Every document, in one list: **[docs/README.md](docs/README.md)**.
 
 How intellisense itself is built and run — product requirements, architecture decisions, the release runbook — is in
 the documentation layers under [`docs/`](docs/): [L2 product](docs/L2-product/), [L3 architecture](docs/L3-architecture/),

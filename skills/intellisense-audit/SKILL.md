@@ -99,7 +99,7 @@ Expected directories per stack:
 
 **Test Naming Quality (4 pts):**
 - Go: Test names describe behavior, not function names
-  - Good: `TestPayout_ProcessCycle_ReturnsErrorOnDuplicateKey`
+  - Good: `TestInvoice_ProcessCycle_ReturnsErrorOnDuplicateKey`
   - Bad: `TestProcess`
 - PHP: Test method names follow behavior patterns
   - Good: `test_invoice_created_when_payment_succeeds`
@@ -231,8 +231,8 @@ TOP FIXES (highest impact first)
 2. [+6 pts] Add test files for uncovered services
    - Category: Test Approach
    - Issue: services/reconciliation.go has no matching test file
-   - Issue: services/payout_cycle.go has no test file
-   - Fix: Create reconciliation_test.go and payout_cycle_test.go
+   - Issue: services/invoice_cycle.go has no test file
+   - Fix: Create reconciliation_test.go and invoice_cycle_test.go
    - Fix: Use behavior-based naming: TestReconciliation_ProcessCycle_ReturnsErrorOnDuplicateKey
    - Effort: 2–4 hours
 

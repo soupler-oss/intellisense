@@ -25,12 +25,12 @@ Do NOT load for frontend (Angular/React/Next/Vue) tasks — not applicable.
 
 - Queue names must be defined in a central registry (PHP: `app/Constants/QueueNames.php`; Go: `pkg/config/jobs.go` or equivalent)
 - Never hardcode queue names as string literals in job files — import from the central registry
-- Use kebab-case: `payout-processing`, `invoice-generation`, `webhook-retries`
+- Use kebab-case: `invoice-processing`, `invoice-generation`, `webhook-retries`
 
 ## Idempotency (Non-negotiable)
 
 Every job MUST be idempotent:
-- Keyed by a business identifier (e.g., `payout_id`, `event_id`) — NOT by job ID
+- Keyed by a business identifier (e.g., `invoice_id`, `event_id`) — NOT by job ID
 - Running the same job twice with the same input must produce the same result
 - Check for already-processed state at the start of the job handler before doing any work
 

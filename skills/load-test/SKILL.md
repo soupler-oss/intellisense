@@ -15,7 +15,7 @@ Tests multi-service behavior under concurrent load. Validates connection pooling
 
 1. **Define baseline** — Run single-instance load test (establish baseline latency distribution)
 2. **Identify resource limits** — Connection pools, database connections, memory, cache size limits
-3. **Execute concurrent test** — Launch N concurrent identical requests (same payout_id, same account, same row)
+3. **Execute concurrent test** — Launch N concurrent identical requests (same invoice_id, same account, same row)
 4. **Measure contentions** — Lock wait times, deadlocks, timeout failures, circuit breaker trips
 5. **Verify atomicity** — Concurrent balance mutations don't cause duplicates or inconsistencies
 6. **Test recovery** — Inject failures (service restart, connection pool saturation, cache invalidation); measure recovery time
@@ -90,7 +90,7 @@ Lock contention incidents: 45 of 1000 (4.5%)
 Lock wait time:
   p50: 3ms
   p99: 28ms
-  max: 156ms (10 requesters all waiting for same payout_id lock)
+  max: 156ms (10 requesters all waiting for same invoice_id lock)
 ```
 
 **Latency distribution:**
@@ -219,7 +219,7 @@ At 100 concurrent requests:
 **Lock Contention Analysis:**
 
 ```
-At 25 concurrent requests to same payout_id:
+At 25 concurrent requests to same invoice_id:
   Queue depth: 10-15 (average)
   p99 lock wait: 85ms
   Max lock wait: 1250ms
@@ -228,7 +228,7 @@ Root cause: SELECT FOR UPDATE lock held for 50-60ms while orders-service process
 All other requesters queue behind this lock.
 
 This is expected behavior for financial consistency. Mitigation:
-  (1) Partition payouts by user_id (different locks for different users)
+  (1) Partition invoices by user_id (different locks for different users)
   (2) Reduce transaction duration (move non-critical work outside lock)
   (3) Accept higher latency at peak load
 ```
@@ -323,10 +323,10 @@ This is correct behavior — balance must be fresh. But the pattern shows cache 
 2. **Short-term (next sprint):**
    - [ ] Implement circuit breaker for inter-service calls (if not present)
    - [ ] Add connection pool health check to detect leaks
-   - [ ] Monitor lock contention on payouts table in production
+   - [ ] Monitor lock contention on invoices table in production
 
 3. **Long-term (architecture):**
-   - [ ] Partition payouts by user_id to reduce lock contention (different users → different locks)
+   - [ ] Partition invoices by user_id to reduce lock contention (different users → different locks)
    - [ ] Reduce transaction duration inside SELECT FOR UPDATE lock
    - [ ] Consider eventual consistency for non-critical balance reads
 
@@ -361,8 +361,8 @@ Deployment contingent on: (1) connection pool increase, (2) load test re-run con
 
 ## Constraints
 
-1. **Production-scale data** — Test against realistic data volumes (10M+ payouts in database), not toy data
-2. **Concurrent requests to same row** — Test financial operations that contend for same lock (payout_id, account_id)
+1. **Production-scale data** — Test against realistic data volumes (10M+ invoices in database), not toy data
+2. **Concurrent requests to same row** — Test financial operations that contend for same lock (invoice_id, account_id)
 3. **Percentile reporting required** — Report p50, p95, p99, p99.9, max; not just average
 4. **Lock wait time measured separately** — Distinguish between application latency and lock wait latency
 5. **Failure modes tested** — Service crash, connection pool exhaustion, circuit breaker behavior, recovery

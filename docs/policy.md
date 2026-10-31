@@ -50,7 +50,7 @@ For each changed file (a rename counts as a delete of the old path and an add of
 
 Patterns are [RE2 regular expressions](https://github.com/google/re2/wiki/Syntax) matched against the repo-relative path with `/` separators. Anchor them: `(^|/)auth([._/-]|$)` matches `internal/auth/x.go` and `auth.go` but not `authors/index.md`.
 
-**Fast lane.** A file that reached its tier only through `default_tier` drops to Tier 0 when every line its diff adds or removes is a comment in that file's language (`//`, `#`, `/* … */` on one line, `<!-- … -->`, or any line of a doc file). It does not drop when the diff contains a phrase like *disable*, *bypass*, *comment out* or *skip validation*: commenting code out is a behaviour change. Files matched by a rule never use the fast lane. Turn it off with `fast_lane: false`.
+**Fast lane.** A file that reached its tier only through `default_tier` drops to Tier 0 when every line its diff adds or removes is a comment in that file's language (`//`, `#`, `/* … */` on one line, `<!-- … -->`, or any line of a doc file). It does not drop when the diff contains a phrase like *disable*, *bypass*, *comment out* or *skip validation*, or a directive that silences a tool — `nolint`, `noqa`, `nosec`, `@ts-ignore`, `type: ignore`, `istanbul ignore`, `pragma: no cover` and similar (the full list is `DangerousPhrases` in `internal/tier/tier.go`): commenting code out or switching a check off is a behaviour change. Files matched by a rule never use the fast lane. Turn it off with `fast_lane: false`.
 
 The change's tier is the highest file tier, raised to `minimum_tier`. `intellisense classify` shows the decision for every file:
 

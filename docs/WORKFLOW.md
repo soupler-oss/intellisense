@@ -1,332 +1,154 @@
-# Complete Development Workflow (10 Steps)
+# Development Workflow (10 Steps)
 
-End-to-end workflow from requirement intake to deployment. This is the default path for all development tasks.
+The default path from a requirement to a merged pull request, using intellisense's Claude Code slash commands. All of
+them come with [Live mode](live-mode.md); `/plan`, `/tdd`, `/verify`, `/diagnose` and `/incident` are also available
+in Core mode (`skills:` in `.intellisense.yml`).
 
----
-
-## Step 1 — Intake (Always First)
-
-**Location**: Any directory
-**Time**: 2-3 minutes
-**Tool**: `/where-to-start`
-
-Run from ANY directory (not necessarily the service repo):
-```
-/where-to-start add account reconciliation feature
-```
-
-Output: Ranked repo list with reasoning.
-
-**Decision**: Does this look right? If developer initially guessed wrong repo, this corrects it.
+The example throughout: *"add CSV export to the monthly report"*.
 
 ---
 
-## Step 2 — Discovery (If Multi-Repo Impact)
+## Step 1 — Intake (always first)
 
-**Location**: Still any directory
-**Time**: 2-3 minutes
-**Tool**: `/multi-service-plan` 
+**Where:** any directory · **Time:** 2–3 minutes · **Command:** `/where-to-start`
 
-If the requirement spans multiple services, run:
 ```
-/multi-service-plan add account reconciliation to payout cycle
+/where-to-start add CSV export to the monthly report
 ```
 
-Output: Per-repo breakdown, deployment sequence, integration points, validation checklist.
+Ranks the repositories that most likely own the change, with reasons, from your organization's service map
+(`infrastructure/service-map.md`). If you guessed the wrong repository, this corrects it.
 
-**Decision**: Is this the full scope? Confirm before proceeding to planning.
+---
+
+## Step 2 — Discovery (if several repositories are involved)
+
+**Where:** any directory · **Time:** 2–3 minutes · **Command:** `/multi-service-plan`
+
+```
+/multi-service-plan add CSV export to the monthly report
+```
+
+Lists what changes in each repository, the order to deploy them in, and where they connect. Confirm the scope before
+planning.
 
 ---
 
 ## Step 3 — Planning
 
-**Location**: Service repo (cd to the right place from Step 1)
-**Time**: 5-10 minutes
-**Tools**: `/plan` (single-repo) or `/multi-service-plan` (multi-repo)
+**Where:** the repository from Step 1 · **Time:** 5–10 minutes · **Command:** `/plan` (one repository) or
+`/multi-service-plan` (several)
 
-### Single-Repo Planning
 ```
-/plan add account reconciliation to payout cycle
+/plan add CSV export to the monthly report
 ```
 
-Output: Affected files, test strategy, risks, success criteria.
-
-### Multi-Repo Planning
-```
-/multi-service-plan add account reconciliation to payout cycle
-```
-
-Output: Per-repo task breakdown, deployment order, integration points.
-
-**Decision**: Does the plan cover all cases? Escalate to architect if uncertain.
+Lists the files affected, the test strategy, the risks and the success criteria. If the change is Tier 1 or 2,
+`/contract` records the change contract the push gate will ask for.
 
 ---
 
-## Step 4 — Pre-Work Validation (Conditional)
+## Step 4 — Checks before changing shared things (only when they apply)
 
-**Only if**: API changes, migrations, or shared-go-lib/ui-widgets work
-**Time**: 5-10 minutes
-**Tools**: `/validate-api-contract`, `/shared-table-impact`, `/web-component-impact`, `/validate-shared-library`
+**Time:** 5–10 minutes
 
-> **Planned skills, not yet built.** The four commands below show the INTENDED
-> interface and do not exist yet. Until they ship, perform each check manually:
-> read the consumers from service-map.md (shared tables, library consumers) and
-> the affected repos' CLAUDE.md (API contracts), then build/verify by hand.
+| You are changing | Check by hand first |
+|---|---|
+| An API other services call | The consumers listed in each repository's `CLAUDE.md` API contracts section: will they still work? |
+| A database table other services read | The consumers in `infrastructure/service-map.md`: does the change break their queries? |
+| A shared library or component | Build each consumer listed in the service map against the change. |
 
-### API Endpoint Changes
-```
-/validate-api-contract POST /api/v1/reconcile
-```
-Checks downstream consumers.
-
-### Shared Database Changes
-```
-/shared-table-impact account_balances
-```
-Lists all consumer services.
-
-### ui-widgets Changes
-```
-/web-component-impact
-```
-Validates consumer builds.
-
-### shared-go-lib Changes
-```
-/validate-shared-library
-```
-Tests all 5 consumers.
-
-**Decision**: Are all consumers compatible? Fix or escalate before implementation.
+Fix or escalate any incompatibility before implementing.
 
 ---
 
-## Step 5 — Implementation (TDD)
+## Step 5 — Implementation (test first)
 
-**Location**: Service repo
-**Time**: 20-40 minutes
-**Tool**: `/tdd`
+**Where:** the repository · **Time:** 20–40 minutes · **Command:** `/tdd`
 
-Run:
-```
-/tdd
-```
-
-Follow RED → GREEN → IMPROVE:
-
-### RED Phase
-Write failing test.
-
-### GREEN Phase
-Write minimum code to pass.
-
-### IMPROVE Phase
-Refactor, extract helpers, improve clarity.
-
-**Decision**: Implementation complete and tests passing? Proceed to verification.
+1. **Red:** write a failing test for the new behaviour.
+2. **Green:** write the least code that passes it.
+3. **Improve:** refactor while the tests stay green.
 
 ---
 
-## Step 6 — Multi-Repo Implementation (If Needed)
+## Step 6 — Other repositories (if several are involved)
 
-**Location**: Each affected service repo (from Step 3)
-**Time**: Repeat Step 5 for each repo
-
-Repeat steps 5 for each additional service in the plan.
-
-**Coordination**: Ensure API contracts remain compatible between repos.
+Repeat Step 5 in each repository from the plan, keeping the contracts between them compatible.
 
 ---
 
 ## Step 7 — Verification
 
-**Location**: Service repo (or all repos if multi-repo)
-**Time**: 5-10 minutes
-**Tools**: `/verify`, `/code-review`
+**Time:** 5–10 minutes · **Commands:** `/verify`, then `/code-review`
 
-Run in order:
-```
-/verify
-```
+`/verify` runs build → tests → lint → security → coverage. Fix failures and run it again.
 
-Checks: build → test → lint → security → coverage.
-
-Output: All checks pass OR list of failures.
-
-### If Failures
-Fix and re-run `/verify`.
-
-### If Passes
-Proceed to code review.
-
-```
-/code-review
-```
-
-Output: CRITICAL, HIGH, MEDIUM, LOW issues.
-
-### If CRITICAL Issues
-Fix and re-run `/code-review`.
-
-### If HIGH Issues Only
-Fix before PR (recommended).
+`/code-review` reports issues as CRITICAL, HIGH, MEDIUM or LOW. Fix every CRITICAL one; fix HIGH ones before the pull
+request.
 
 ---
 
-## Step 8 — Cross-Repo Validation (Multi-Repo Only)
+## Step 8 — Cross-repository check (several repositories only)
 
-**Location**: Back to Step 7 for each repo
-**Time**: 5 minutes per repo
-
-Repeat verification in all affected repos:
-- orders-service (main implementation)
-- reporting-service (audit trail updates)
-- (accounts-service: read-only, no changes)
-
-Ensure:
-- All repos build
-- All tests pass
-- Deployment order is enforced
+Run Step 7 in every affected repository, and confirm the deployment order from Step 2 still holds.
 
 ---
 
-## Step 9 — Knowledge Capture
+## Step 9 — Knowledge capture
 
-**Location**: Any directory
-**Time**: 3-5 minutes
-**Tool**: `/learn`
+**Time:** 3–5 minutes · **Command:** `/learn`
 
-Run:
-```
-/learn
-```
-
-Output: Extracted patterns, architectural insights, and suggested rule or memory entries (one per insight).
-
-**Action**: Keep the ones worth keeping: as a rule (the repo's `CLAUDE.md` or `.intellisense/rules/organization/`), or with `bd remember` when the team's tracker is Beads. intellisense does not use MEMORY.md. Update the relevant service-repo CLAUDE.md if a new architectural fact was discovered.
+Extracts patterns and decisions from the session and suggests where to keep each one: a rule (the repository's
+`CLAUDE.md` or `.intellisense/rules/organization/`), or `bd remember` when the team uses Beads.
 
 ---
 
-## Step 10 — Commit & PR
+## Step 10 — Commit and pull request
 
-**Location**: Service repo
-**Time**: 10-15 minutes
-
-### Commit
 ```bash
-git checkout -b feat/JIRA-123-account-reconciliation
-git add .
-git commit -m "feat(orders-service): add account reconciliation to payout cycle
-
-- Validates account balance against payout cycle total
-- Uses SELECT FOR UPDATE for race-condition safety
-- Includes concurrent request test suite
-- 95%+ test coverage (financial code)
-
-Closes JIRA-123"
-
-git push -u origin feat/JIRA-123-account-reconciliation
+git switch -c feat/csv-export
+git add -A
+git commit -m "feat(reports): add CSV export to the monthly report" \
+  -m "Refs: #142" \
+  -m "Change Contract: scope=monthly report CSV export, risk=low"
+git push -u origin feat/csv-export
 ```
 
-### PR Description
-```markdown
-## What
-Add account reconciliation to payout cycle. Validates that account_balances 
-matches sum of all payout records.
+The task reference (`Refs: #142`) and the change contract are what the push gate checks for a Tier 1 or 2 change; use
+your tracker's trailer (`Jira: PROJ-142`, `Linear: ENG-142`, `Beads: bd-142`).
 
-## Why
-Prevents long-term balance drift. Catches bugs in payout or account mutation logic.
-
-## Testing
-- Unit: reconciliation matching logic (15 cases)
-- Integration: concurrent requests, database transactions (8 cases)
-- Coverage: 95%+ (financial code), 82% overall
-
-## Cross-Repo Impact
-- accounts-service: read-only access, no changes
-- reporting-service: audit trail updates (compatible)
-
-## Deployment Order
-1. orders-service (this change)
-2. Monitor logs for reconciliation events
-3. Notify reporting-service team
-
-## Rollback Plan
-Revert commit. Reconciliation state is read-only; no data loss.
-
-Signed-off-by: Your Name <email>
-```
+A good pull request description says **what** changed, **why**, **how it was tested**, the **impact on other
+repositories**, the **deployment order** and the **rollback plan**.
 
 ---
 
-## Incident Fast Path (Production Only)
+## Production incident
 
-If production incident: Skip to `/incident` immediately. Replaces steps 1-10 with abbreviated workflow:
-
-1. Run `/incident`
-2. Follow abbreviated workflow
-3. Must complete financial safety checklist (non-negotiable)
-4. Create PR with rollback plan
-5. Expedited review (1 approver)
-6. Deploy
-7. Create follow-up ticket to complete skipped steps within 48 hours
+Use `/incident` instead of steps 1–10. It runs a shortened path — diagnose, a minimal fix with a rollback plan,
+expedited review — and ends with a follow-up ticket to complete the skipped steps within 48 hours.
 
 ---
 
-## Troubleshooting During Workflow
+## When stuck
 
-**Test fails mysteriously?**
-→ Run `/diagnose` (traces failure in current repo)
-
-**Not sure if change breaks other services?**
-→ Run `/multi-service-plan` Step 0 (discovers affected repos from service-map.md;
-the dedicated `/discover-impact` skill is planned, not yet built)
-
-**Shared library changed?**
-→ Build all consumers listed in service-map.md by hand
-(`/validate-shared-library` is planned, not yet built)
-
-**API endpoint changed?**
-→ Check downstream consumers from the CLAUDE.md API Contracts section by hand
-(`/validate-api-contract` is planned, not yet built)
-
-**Shared database table modified?**
-→ Find all consumers via service-map.md Shared Database Tables by hand
-(`/shared-table-impact` is planned, not yet built)
+| Problem | Command |
+|---|---|
+| A test fails and you don't know why | `/diagnose` |
+| Not sure which other services a change affects | `/multi-service-plan` (its first step reads the service map) |
+| Not sure which repository owns something | `/where-to-start` |
 
 ---
 
-## Workflow Checklist
+## Checklist
 
-- [ ] Step 1: `/where-to-start` (identified correct repo)
-- [ ] Step 2: `/multi-service-plan` Step 0 impact discovery (if multi-repo)
-- [ ] Step 3: `/plan` or `/multi-service-plan` (understood requirement)
-- [ ] Step 4: Pre-work validation (if API/migration/shared-lib changes)
-- [ ] Step 5: `/tdd` (RED → GREEN → IMPROVE)
-- [ ] Step 6: Repeat Step 5 for each repo (if multi-repo)
-- [ ] Step 7: `/verify`, `/code-review` (all checks pass)
-- [ ] Step 8: Cross-repo validation (if multi-repo)
-- [ ] Step 9: `/learn` (captured knowledge)
-- [ ] Step 10: Commit with conventional format, PR with complete description
-
----
-
-## Time Budgets
-
-| Step | Time | Task |
-|------|------|------|
-| 1 | 2-3 min | `/where-to-start` |
-| 2 | 2-3 min | `/multi-service-plan` Step 0 impact discovery (if multi-repo) |
-| 3 | 5-10 min | `/plan` or `/multi-service-plan` |
-| 4 | 5-10 min | Pre-work validation (conditional) |
-| 5-6 | 20-40 min | `/tdd` (per repo) |
-| 7-8 | 5-10 min | `/verify`, `/code-review` (per repo) |
-| 9 | 3-5 min | `/learn` |
-| 10 | 10-15 min | Commit & PR |
-| **Total** | **60-100 min** | **Full workflow (typical single-repo feature)** |
-
-Multi-repo features take longer (repeat steps 5-8 per service).
-
----
-
-**This is the default workflow.** Always follow it unless `/incident` is triggered.
+- [ ] 1 `/where-to-start` — the right repository
+- [ ] 2 `/multi-service-plan` — if several repositories
+- [ ] 3 `/plan` — the requirement understood; `/contract` if Tier 1+
+- [ ] 4 Shared API, table or library checked — if any
+- [ ] 5 `/tdd` — red, green, improve
+- [ ] 6 Repeated per repository — if several
+- [ ] 7 `/verify` and `/code-review` pass
+- [ ] 8 Every affected repository verified — if several
+- [ ] 9 `/learn`
+- [ ] 10 Commit with a task reference and contract; complete pull request description

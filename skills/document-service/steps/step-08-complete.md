@@ -76,9 +76,9 @@ Output to terminal:
 
   [✓] knowledge-base/00-system-context.md
       - Service metadata (orders-service, Go, GORM)
-      - Owned tables (payouts, journal_entries, payout_items)
+      - Owned tables (invoices, journal_entries, invoice_items)
       - API endpoints (8 documented)
-      - Shared libraries (shared-go-lib/crypto, shared-go-lib/kafka)
+      - Shared libraries (shared-lib/crypto, shared-lib/kafka)
       - Key patterns (error handling, concurrency, soft-delete)
       - Size: 1.1k tokens (auto-loaded into Claude via @knowledge-base/00-system-context.md)
 
@@ -98,7 +98,7 @@ Output to terminal:
 
   [⚠️] .intellisense-drift-report.md
       - 4 drift items found (severity: 2×MEDIUM, 1×LOW)
-      - Missing: payout_reconciliation table, 2 endpoints, soft-delete domain term
+      - Missing: invoice_reconciliation table, 2 endpoints, soft-delete domain term
       - Recommendation: Update CLAUDE.md before next deployment
       - Size: 2.1k tokens
 
@@ -115,7 +115,7 @@ Output to terminal:
         Location: .intellisense-drift-report.md
         ⚠️ Status: FAILED (4 items found)
         Action: Fix CLAUDE.md to match codebase
-        - Add payout_reconciliation to Shared Tables section
+        - Add invoice_reconciliation to Shared Tables section
         - Add 2 missing endpoints to API Contracts section
         - Add Soft Delete to Domain Terms section
 
@@ -124,7 +124,7 @@ Output to terminal:
         Update all 5 sections:
         - [ ] Stack: ✓ Matches detected (Go + GORM)
         - [ ] Architecture: ✓ Correct (3-layer)
-        - [ ] Shared Tables: ❌ Add payout_reconciliation
+        - [ ] Shared Tables: ❌ Add invoice_reconciliation
         - [ ] API Contracts: ❌ Add missing endpoints
         - [ ] Domain Terms: ❌ Add Soft Delete definition
 
@@ -165,10 +165,10 @@ Output to terminal:
 
   Stack: go (GORM ORM)
   Files Scanned: 150 total (models: 5, services: 4, handlers: 6, migrations: 12, tests: 18)
-  Tables Detected: 4 (payouts, journal_entries, payout_items, payout_reconciliation)
+  Tables Detected: 4 (invoices, journal_entries, invoice_items, invoice_reconciliation)
   Endpoints Detected: 8 (GET: 3, POST: 1, PUT: 1, DELETE: 1, PATCH: 2)
   Financial Patterns: 5/5 (int64 minor-currency-units, SELECT FOR UPDATE, idempotency, soft-delete, audit trail)
-  Shared Libraries: 2 (shared-go-lib/crypto, shared-go-lib/kafka)
+  Shared Libraries: 2 (shared-lib/crypto, shared-lib/kafka)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

@@ -17,7 +17,7 @@ This directory contains service-specific documentation. Files are loaded by Clau
 
 ### Team-required (humans fill)
 
-- **03-biz-critical-flows.md** — Mission-critical user journeys: payout, payment, reconciliation, etc.
+- **03-biz-critical-flows.md** — Mission-critical user journeys: invoice, payment, reconciliation, etc.
 - **03-biz-domain-rules.md** — Business logic, domain constraints, term definitions specific to this service.
 - **04-eng-gotchas.md** — Non-obvious issues discovered in production or development, how to avoid them.
 - **04-eng-conventions.md** — Naming conventions, error handling style, PR checklist, code review standards.

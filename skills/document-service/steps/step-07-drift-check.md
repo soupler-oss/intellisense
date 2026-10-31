@@ -41,21 +41,21 @@ Read CLAUDE.md in repo root. Extract all 5 sections:
 
 Detected tables from migrations/:
 ```
-payouts, journal_entries, payout_items, payout_reconciliation
+invoices, journal_entries, invoice_items, invoice_reconciliation
 ```
 
 CLAUDE.md Shared Tables section lists:
 ```
-payouts, journal_entries, payout_items
+invoices, journal_entries, invoice_items
 ```
 
-**Drift found**: `payout_reconciliation` table detected but not documented in CLAUDE.md.
+**Drift found**: `invoice_reconciliation` table detected but not documented in CLAUDE.md.
 
 **Report**:
 ```
 ❌ Table Mismatch
-- Payout_reconciliation: Detected in migrations/ but NOT in CLAUDE.md Shared Tables
-  Location: migrations/2026-04-15_create_payout_reconciliation.sql
+- Invoice_reconciliation: Detected in migrations/ but NOT in CLAUDE.md Shared Tables
+  Location: migrations/2026-04-15_create_invoice_reconciliation.sql
   Issue: May indicate undocumented feature or schema drift
   Action: Update CLAUDE.md Shared Tables section
 ```
@@ -66,27 +66,27 @@ payouts, journal_entries, payout_items
 
 Detected endpoints:
 ```
-GET /api/payouts, POST /api/payouts, GET /api/payouts/:id, PUT /api/payouts/:id/finalize, DELETE /api/payouts/:id, ...
+GET /api/invoices, POST /api/invoices, GET /api/invoices/:id, PUT /api/invoices/:id/finalize, DELETE /api/invoices/:id, ...
 ```
 
 CLAUDE.md API Contracts lists:
 ```
-GET /api/payouts, POST /api/payouts, GET /api/payouts/:id
+GET /api/invoices, POST /api/invoices, GET /api/invoices/:id
 ```
 
-**Drift found**: `PUT /api/payouts/:id/finalize` and `DELETE /api/payouts/:id` detected but not documented.
+**Drift found**: `PUT /api/invoices/:id/finalize` and `DELETE /api/invoices/:id` detected but not documented.
 
 **Report**:
 ```
 ⚠️ Endpoint Mismatch
-- PUT /api/payouts/:id/finalize: Detected in handlers/payout.go but NOT in CLAUDE.md
-  Location: handlers/payout.go:145
-  Consumers: Payout Cycle service (inferred from code)
+- PUT /api/invoices/:id/finalize: Detected in handlers/invoice.go but NOT in CLAUDE.md
+  Location: handlers/invoice.go:145
+  Consumers: Invoice Cycle service (inferred from code)
   Issue: CLAUDE.md is incomplete
   Action: Add endpoint to API Contracts section
 
-- DELETE /api/payouts/:id: Detected in handlers/payout.go but NOT in CLAUDE.md
-  Location: handlers/payout.go:165
+- DELETE /api/invoices/:id: Detected in handlers/invoice.go but NOT in CLAUDE.md
+  Location: handlers/invoice.go:165
   Type: Soft-delete (sets deleted_at)
   Issue: CLAUDE.md is incomplete
   Action: Add endpoint to API Contracts section
@@ -98,7 +98,7 @@ GET /api/payouts, POST /api/payouts, GET /api/payouts/:id
 
 CLAUDE.md Domain Terms might list:
 ```
-- Payout: payouts table, PayoutService
+- Invoice: invoices table, InvoiceService
 - Journal Entry: journal_entries table
 - Idempotency: transaction_reference field
 ```
@@ -106,7 +106,7 @@ CLAUDE.md Domain Terms might list:
 **Check for missing or incorrect mappings**:
 
 ```
-✓ Payout → payouts table, PayoutService — CORRECT
+✓ Invoice → invoices table, InvoiceService — CORRECT
 ✓ Journal Entry → journal_entries table — CORRECT
 ❌ Soft Delete: NOT in Domain Terms but detected in code
   Field: deleted_at on all financial tables
@@ -145,7 +145,7 @@ Compare financial_patterns from step-02 against CLAUDE.md Financial Rules sectio
 ✓ Idempotency: Detected AND documented — CORRECT
 ✓ Soft-delete: Detected AND mentioned in Financial Rules — CORRECT
 ⚠️ SELECT FOR UPDATE: Detected in migrations but CLAUDE.md doesn't explain it
-  Location: migrations/2026-04-21_payouts.sql:42
+  Location: migrations/2026-04-21_invoices.sql:42
   Impact: Critical for concurrent balance updates
   Action: Add to Architecture or Financial Rules section
 ```
@@ -176,36 +176,36 @@ Scan Summary: 4 drift items found
 
 ## Detailed Findings
 
-### 1. ❌ Missing Table: payout_reconciliation
-- **Detected**: migrations/2026-04-21_create_payout_reconciliation.sql
+### 1. ❌ Missing Table: invoice_reconciliation
+- **Detected**: migrations/2026-04-21_create_invoice_reconciliation.sql
 - **Expected in CLAUDE.md**: Shared Tables section
 - **Actual in CLAUDE.md**: Not listed
 - **Severity**: MEDIUM — Feature exists but not documented
 - **Fix**: Add entry to CLAUDE.md Shared Tables section
   ```
-  - `payout_reconciliation`: id, payout_id (fk), actual_amount (int64), expected_amount (int64), status
+  - `invoice_reconciliation`: id, invoice_id (fk), actual_amount (int64), expected_amount (int64), status
   ```
 
-### 2. ❌ Missing Endpoint: PUT /api/payouts/:id/finalize
-- **Detected**: handlers/payout.go:145
+### 2. ❌ Missing Endpoint: PUT /api/invoices/:id/finalize
+- **Detected**: handlers/invoice.go:145
 - **Expected in CLAUDE.md**: API Contracts section
 - **Actual in CLAUDE.md**: Not listed
 - **Severity**: MEDIUM — API exists but not documented
-- **Consumers**: Payout Cycle service (inferred from imports)
+- **Consumers**: Invoice Cycle service (inferred from imports)
 - **Fix**: Add to CLAUDE.md API Contracts section
   ```
-  - `PUT /api/payouts/:id/finalize`: Finalize payout, trigger journal updates
+  - `PUT /api/invoices/:id/finalize`: Finalize invoice, trigger journal updates
   ```
 
-### 3. ❌ Missing Endpoint: DELETE /api/payouts/:id
-- **Detected**: handlers/payout.go:165
+### 3. ❌ Missing Endpoint: DELETE /api/invoices/:id
+- **Detected**: handlers/invoice.go:165
 - **Expected in CLAUDE.md**: API Contracts section
 - **Actual in CLAUDE.md**: Not listed
 - **Severity**: MEDIUM — API exists but not documented
 - **Type**: Soft-delete (sets deleted_at, does not remove from DB)
 - **Fix**: Add to CLAUDE.md API Contracts section
   ```
-  - `DELETE /api/payouts/:id`: Soft-delete payout (sets deleted_at)
+  - `DELETE /api/invoices/:id`: Soft-delete invoice (sets deleted_at)
   ```
 
 ### 4. ⚠️ Missing Domain Term: Soft Delete
@@ -232,7 +232,7 @@ Scan Summary: 4 drift items found
 ## Recommended Action Plan
 
 1. **Immediate** (before next deployment):
-   - [ ] Add payout_reconciliation table to CLAUDE.md Shared Tables
+   - [ ] Add invoice_reconciliation table to CLAUDE.md Shared Tables
    - [ ] Add missing endpoints to CLAUDE.md API Contracts
 
 2. **Before Release** (within 1 week):

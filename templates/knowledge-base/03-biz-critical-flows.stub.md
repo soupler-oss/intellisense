@@ -40,16 +40,16 @@ Mission-critical user journeys. Each flow must complete successfully for the ser
 
 ---
 
-## Example: Payout Flow (Payment Service)
+## Example: Invoice Flow (Payment Service)
 
-**Trigger**: User initiates payout
+**Trigger**: User initiates invoice
 
 **Steps**:
 1. Handler receives POST /api/v1/settle with account_id and amount
 2. Service fetches account_balance from accounts-service (via API call)
 3. Service verifies balance >= amount (SELECT FOR UPDATE account_balances)
 4. Service deducts from account_balance, logs transaction
-5. Service emits "payout.completed" event to reporting-service
+5. Service emits "invoice.completed" event to reporting-service
 6. Async job processes event → generates invoice, updates accounting
 7. Handler returns 200 OK to user
 
@@ -62,14 +62,14 @@ Mission-critical user journeys. Each flow must complete successfully for the ser
 **Failure Mode**:
 - If balance < amount: reject with 400 before transaction starts
 - If event fails to emit: rollback transaction, user sees error, retry available
-- If invoice job fails: alert ops team, payout stays in COMPLETED state, retry job manually
+- If invoice job fails: alert ops team, invoice stays in COMPLETED state, retry job manually
 
 **Data Consistency**:
-- Transaction isolation: SERIALIZABLE (prevents phantom reads on concurrent payouts)
+- Transaction isolation: SERIALIZABLE (prevents phantom reads on concurrent invoices)
 - Lock: SELECT FOR UPDATE on account_balances during balance check and deduction
 - Rollback: If step 4 fails, transaction rolled back, balance unchanged
 
 **Monitoring**:
-- Payout success rate (target: 99.9%)
-- Payout latency p95 (target: <500ms)
-- Alert if >2% of payouts fail to emit event
+- Invoice success rate (target: 99.9%)
+- Invoice latency p95 (target: <500ms)
+- Alert if >2% of invoices fail to emit event

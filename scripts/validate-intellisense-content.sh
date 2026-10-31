@@ -408,13 +408,7 @@ validate_backup_path_isolation() {
 # Skills are invoked as `/name` and must resolve to a skills/<name>/ directory.
 # A backtick-wrapped `/name` that has no skill dir is a dead reference that
 # misleads Claude at runtime (it tries to invoke a command that doesn't exist).
-# Known-but-not-yet-built skills are allowlisted below so the documented backlog
-# stays green while ANY NEW dead reference fails the build.
-
-# Skills referenced in docs but intentionally not yet built (REQUIRES DESIGN
-# REVIEW: build them or de-document the workflow). Keep this list short and
-# shrinking — do not add to it to silence a real defect.
-KNOWN_PLANNED_SKILLS="discover-impact shared-table-impact validate-api-contract sequence-plan web-component-impact validate-shared-library"
+# Every referenced skill must exist: there is no allowlist for planned ones.
 # Tokens that look like `/name` but are filesystem paths or noise, not skills.
 NON_SKILL_TOKENS="tmp dev etc usr var opt bin sbin home root path null stdout stderr"
 # Names deliberately cited as NONEXISTENT skills in teaching examples (e.g.
@@ -429,7 +423,7 @@ validate_skill_references() {
     [ -d "$dir" ] || continue
     valid_set+="$(basename "$dir") "
   done
-  valid_set+="$KNOWN_PLANNED_SKILLS $NON_SKILL_TOKENS $INTENTIONAL_NONEXISTENT_SKILLS "
+  valid_set+="$NON_SKILL_TOKENS $INTENTIONAL_NONEXISTENT_SKILLS "
 
   local checked=0 dead=0 name
   while IFS= read -r file; do
@@ -439,7 +433,7 @@ validate_skill_references() {
       [ -z "$name" ] && continue
       ((checked++))
       if [[ "$valid_set" != *" $name "* ]]; then
-        add_error "Dead skill reference '/$name' in $(basename "$file") — no skills/$name/ directory (add the skill, fix the name, or allowlist if planned)"
+        add_error "Dead skill reference '/$name' in $(basename "$file") — no skills/$name/ directory (add the skill or fix the name)"
         ((dead++))
       fi
     # A skill invocation is `/name` closed by a backtick (`/verify`) or a space

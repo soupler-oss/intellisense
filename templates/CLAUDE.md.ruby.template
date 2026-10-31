@@ -65,7 +65,7 @@ discussion unless asked. Expand only on follow-up."]
 
 ```
 Rails API service handling order processing for the billing domain.
-Reads user profiles from auth-service; enqueues payout jobs with Sidekiq.
+Reads user profiles from auth-service; enqueues invoice jobs with Sidekiq.
 Balance updates run in a transaction with `with_lock`; amounts are integer cents (money-rails).
 Idempotency keys are enforced by a unique index.
 ```
@@ -77,7 +77,7 @@ the full agent pipeline, regardless of estimated scope.
 
 | File | Size | Why High Risk |
 |---|---|---|
-| [TODO: app/services/payments/refund.rb] | [XX KB] | [Reason: e.g., core payout logic, shared by all callers] |
+| [TODO: app/services/payments/refund.rb] | [XX KB] | [Reason: e.g., core invoice logic, shared by all callers] |
 | [TODO: app/controllers/concerns/authentication.rb] | [XX KB] | [Reason: e.g., all API entry points pass through here] |
 
 ## Structural Map
@@ -113,7 +113,7 @@ Layers and their purpose:
 
 [Service-specific glossary. Example:]
 - **Idempotency Key** — UUID required on all mutating endpoints; DB unique constraint enforces single-effect
-- **Order Cycle** — payout window (24h); orders bucketed by `created_at` UTC date
+- **Order Cycle** — invoice window (24h); orders bucketed by `created_at` UTC date
 
 ## Run / Test / Build
 
