@@ -31,7 +31,7 @@ runs:
   using: composite
   steps:
     # Built from this action's own source at the pinned ref, so what runs is exactly what you reviewed.
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v7
       with:
         go-version: stable
         cache: false
